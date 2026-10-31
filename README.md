@@ -149,8 +149,9 @@ aether-ground-station/
 
 ## Связанные репозитории
 
-Ранее разработка велась в монорепозитории [Order-Code67/aether](https://github.com/Order-Code67/aether).  
-**Этот репозиторий** — самостоятельный исходный код Aether Ground Station.
+Ранее разработка велась в монорепозитории [Order-Code67/aether](https://github.com/Order-Code67/aether)  
+(ветка `cursor/windows-installer-ags-logo-626f`, коммит `3715c0f`).  
+**Этот репозиторий** — канонический исходный код Aether Ground Station; код сверен с указанной веткой монорепо.
 
 ---
 
