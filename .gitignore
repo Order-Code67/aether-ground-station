@@ -1,0 +1,36 @@
+# Dependencies & build
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# Installers & binaries
+release/
+*.exe
+*.msi
+*.dmg
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+credentials.json
+secrets/
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Test / coverage
+coverage/
+.nyc_output/
