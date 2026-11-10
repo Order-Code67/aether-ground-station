@@ -9,6 +9,7 @@ import {
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { eventBus } from "@/services/events/eventBus";
+import { listStations, type Station } from "@/services/stations";
 import { OSM_STYLE, offlineStyle } from "./mapStyles";
 
 function haversineM(
@@ -47,11 +48,13 @@ export function MapPanel() {
 
   const [terrain, setTerrain] = useState(false);
   const [markers, setMarkers] = useState<UserMarker[]>([]);
+  const [stations, setStations] = useState<Station[]>([]);
   const [measureMode, setMeasureMode] = useState(false);
   const [distanceM, setDistanceM] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tileMode, setTileMode] = useState<TileMode>("offline");
   const [localUrl, setLocalUrl] = useState("");
+  const stationMarkersRef = useRef<Marker[]>([]);
 
   const measureModeRef = useRef(measureMode);
   measureModeRef.current = measureMode;
@@ -145,6 +148,12 @@ export function MapPanel() {
   }, [tileMode, localUrl]);
 
   useEffect(() => {
+    void listStations()
+      .then(setStations)
+      .catch(() => setStations([]));
+  }, []);
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     markersRef.current.forEach((m) => m.remove());
@@ -159,6 +168,29 @@ export function MapPanel() {
         .addTo(map);
     });
   }, [markers]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    stationMarkersRef.current.forEach((m) => m.remove());
+    stationMarkersRef.current = stations.map((s) => {
+      const el = document.createElement("div");
+      el.className =
+        "h-3.5 w-3.5 rotate-45 border-2 border-ags-warning bg-ags-elevated shadow";
+      el.title = `${s.name} az=${s.azimuthDeg ?? "—"}`;
+      const az = s.azimuthDeg ?? 0;
+      const popup = new Popup().setHTML(
+        `<strong>${s.name}</strong><br/>AMSL ant: ${
+          s.antennaCenterAmslM == null ? "N/A" : s.antennaCenterAmslM.toFixed(1) + " m"
+        }<br/>Az ${az}° (${s.azimuthRef ?? "true"})`,
+      );
+      return new Marker({ element: el })
+        .setLngLat([s.longitude, s.latitude])
+        .setPopup(popup)
+        .setRotation(az)
+        .addTo(map);
+    });
+  }, [stations]);
 
   const addMarkerHere = () => {
     const map = mapRef.current;

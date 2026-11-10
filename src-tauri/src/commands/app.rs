@@ -14,7 +14,7 @@ pub fn get_app_info() -> AppInfo {
     AppInfo {
         name: "Aether Ground Station",
         version: env!("CARGO_PKG_VERSION"),
-        stage: "0.3-remote-api",
+        stage: "2.0-core",
         platform: std::env::consts::OS,
     }
 }

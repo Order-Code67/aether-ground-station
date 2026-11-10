@@ -1,1 +1,4 @@
+pub mod migrations;
+pub mod permissions;
 pub mod sqlite;
+pub mod stations;

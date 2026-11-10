@@ -3,6 +3,7 @@ export type DeviceStatus =
   | "Offline"
   | "Lost"
   | "Connecting"
+  | "Reconnecting"
   | "Warning"
   | "Error"
   | "Unknown";

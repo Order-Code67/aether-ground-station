@@ -9,6 +9,9 @@ export type PanelKind =
   | "video"
   | "walksnail"
   | "map"
+  | "stations"
+  | "terrain"
+  | "pantilt"
   | "devices"
   | "telemetry"
   | "serial"
@@ -47,6 +50,9 @@ export const PANEL_KIND_LABELS: Record<PanelKind, string> = {
   video: "Видео",
   walksnail: "Walksnail",
   map: "Карта",
+  stations: "Станции",
+  terrain: "Рельеф",
+  pantilt: "Pan-Tilt",
   devices: "Устройства",
   telemetry: "Диагностика",
   serial: "COM / UART",

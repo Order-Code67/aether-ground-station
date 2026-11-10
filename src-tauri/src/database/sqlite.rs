@@ -27,7 +27,7 @@ fn db_path() -> Result<PathBuf, String> {
     Ok(dir.join("ags.sqlite"))
 }
 
-fn with_conn<T>(
+pub fn with_conn<T>(
     state: &State<'_, DbState>,
     f: impl FnOnce(&Connection) -> Result<T, String>,
 ) -> Result<T, String> {
@@ -36,90 +36,6 @@ fn with_conn<T>(
         .as_ref()
         .ok_or_else(|| "БД не инициализирована".to_string())?;
     f(conn)
-}
-
-fn migrate(conn: &Connection) -> Result<(), String> {
-    conn.execute_batch(
-        r#"
-        CREATE TABLE IF NOT EXISTS profiles (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          description TEXT,
-          payload TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS workspace_layouts (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          profile_id TEXT,
-          payload TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS event_log (
-          id TEXT PRIMARY KEY,
-          at TEXT NOT NULL,
-          severity TEXT NOT NULL,
-          source TEXT NOT NULL,
-          message TEXT NOT NULL,
-          details TEXT
-        );
-        CREATE TABLE IF NOT EXISTS archive_clips (
-          id TEXT PRIMARY KEY,
-          payload TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS settings_kv (
-          key TEXT PRIMARY KEY,
-          value TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS devices (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          manufacturer TEXT,
-          model TEXT,
-          device_type TEXT,
-          connection_type TEXT,
-          configuration TEXT,
-          status TEXT,
-          updated_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS video_sources (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          source_type TEXT NOT NULL,
-          configuration TEXT NOT NULL,
-          status TEXT
-        );
-        CREATE TABLE IF NOT EXISTS recordings (
-          id TEXT PRIMARY KEY,
-          source_id TEXT,
-          filename TEXT NOT NULL,
-          start_time TEXT NOT NULL,
-          end_time TEXT,
-          metadata TEXT
-        );
-        CREATE TABLE IF NOT EXISTS users (
-          id TEXT PRIMARY KEY,
-          username TEXT NOT NULL UNIQUE,
-          role TEXT NOT NULL,
-          password_hash TEXT NOT NULL,
-          salt TEXT NOT NULL,
-          disabled INTEGER NOT NULL DEFAULT 0,
-          configuration TEXT
-        );
-        CREATE TABLE IF NOT EXISTS audit_log (
-          id TEXT PRIMARY KEY,
-          user_id TEXT,
-          timestamp TEXT NOT NULL,
-          event TEXT NOT NULL,
-          details TEXT
-        );
-        CREATE TABLE IF NOT EXISTS kv_json (
-          key TEXT PRIMARY KEY,
-          value TEXT NOT NULL
-        );
-        "#,
-    )
-    .map_err(|e| e.to_string())
 }
 
 fn hash_password(password: &str, salt: &str) -> String {
@@ -133,7 +49,9 @@ fn hash_password(password: &str, salt: &str) -> String {
 pub fn open_and_migrate(state: &DbState) -> Result<String, String> {
     let path = db_path()?;
     let conn = Connection::open(&path).map_err(|e| e.to_string())?;
-    migrate(&conn)?;
+    conn.execute_batch("PRAGMA foreign_keys = ON;")
+        .map_err(|e| e.to_string())?;
+    super::migrations::apply_migrations(&conn)?;
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0))
         .unwrap_or(0);
@@ -150,6 +68,18 @@ pub fn open_and_migrate(state: &DbState) -> Result<String, String> {
     let mut guard = state.conn.lock().map_err(|_| "DB lock".to_string())?;
     *guard = Some(conn);
     Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn db_schema_version(state: State<'_, DbState>) -> Result<i64, String> {
+    with_conn(&state, |conn| {
+        conn.query_row(
+            "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]

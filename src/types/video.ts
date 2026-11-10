@@ -1,4 +1,13 @@
-export type VideoSignalState = "unknown" | "ok" | "degraded" | "lost" | "no-device";
+/** ТЗ §6: нет устройства / нет сигнала / ок / потеря / запись / ошибка. */
+export type VideoSignalState =
+  | "unknown"
+  | "no-device"
+  | "no-signal"
+  | "ok"
+  | "degraded"
+  | "lost"
+  | "recording"
+  | "error";
 
 export interface CaptureDeviceInfo {
   deviceId: string;

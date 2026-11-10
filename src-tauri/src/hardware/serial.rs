@@ -7,6 +7,8 @@ use std::time::Duration;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::auth_session::{self, AuthSessionState};
+
 const SERIAL_DATA_EVENT: &str = "serial-data";
 const SERIAL_BYTES_EVENT: &str = "serial-bytes";
 const SERIAL_STATUS_EVENT: &str = "serial-status";
@@ -130,9 +132,11 @@ pub fn serial_get_status(state: State<'_, SerialState>) -> SerialStatus {
 pub fn serial_open(
     app: AppHandle,
     state: State<'_, SerialState>,
+    auth: State<'_, AuthSessionState>,
     path: String,
     baud_rate: u32,
 ) -> Result<SerialStatus, String> {
+    auth_session::require_role_write(&auth)?;
     let mut guard = state.inner.lock().unwrap_or_else(|e| e.into_inner());
     close_inner(&mut guard);
 
@@ -239,7 +243,9 @@ pub fn serial_open(
 pub fn serial_close(
     app: AppHandle,
     state: State<'_, SerialState>,
+    auth: State<'_, AuthSessionState>,
 ) -> Result<SerialStatus, String> {
+    auth_session::require_role_write(&auth)?;
     let mut guard = state.inner.lock().unwrap_or_else(|e| e.into_inner());
     close_inner(&mut guard);
     let status = SerialStatus {
@@ -253,7 +259,12 @@ pub fn serial_close(
 }
 
 #[tauri::command]
-pub fn serial_write(state: State<'_, SerialState>, data: String) -> Result<(), String> {
+pub fn serial_write(
+    state: State<'_, SerialState>,
+    auth: State<'_, AuthSessionState>,
+    data: String,
+) -> Result<(), String> {
+    auth_session::require_role_write(&auth)?;
     let guard = state.inner.lock().unwrap_or_else(|e| e.into_inner());
     let open = guard
         .as_ref()
@@ -272,7 +283,12 @@ pub fn serial_write(state: State<'_, SerialState>, data: String) -> Result<(), S
 
 /// Write raw bytes (MSP / MAVLink). Prefer this over `serial_write` for binary frames.
 #[tauri::command]
-pub fn serial_write_bytes(state: State<'_, SerialState>, bytes: Vec<u8>) -> Result<(), String> {
+pub fn serial_write_bytes(
+    state: State<'_, SerialState>,
+    auth: State<'_, AuthSessionState>,
+    bytes: Vec<u8>,
+) -> Result<(), String> {
+    auth_session::require_role_write(&auth)?;
     let guard = state.inner.lock().unwrap_or_else(|e| e.into_inner());
     let open = guard
         .as_ref()

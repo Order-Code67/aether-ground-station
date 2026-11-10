@@ -10,6 +10,9 @@ import { NetworkPanel } from "@/modules/network/NetworkPanel";
 import { UsbPanel } from "@/modules/usb/UsbPanel";
 import { ArchivePanel } from "@/modules/archive/ArchivePanel";
 import { EventsMiniPanel } from "@/modules/archive/EventsMiniPanel";
+import { StationsPanel } from "@/modules/stations/StationsPanel";
+import { TerrainPanel } from "@/modules/terrain/TerrainPanel";
+import { PanTiltPanel } from "@/modules/pantilt/PanTiltPanel";
 
 interface PanelHostProps {
   kind: PanelKind;
@@ -23,6 +26,12 @@ function Inner({ kind }: PanelHostProps) {
       return <WalksnailPanel />;
     case "map":
       return <MapPanel />;
+    case "stations":
+      return <StationsPanel />;
+    case "terrain":
+      return <TerrainPanel />;
+    case "pantilt":
+      return <PanTiltPanel />;
     case "devices":
       return <DevicesPanel />;
     case "telemetry":

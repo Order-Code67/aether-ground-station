@@ -1,9 +1,11 @@
+mod auth_session;
 mod commands;
 mod database;
 mod hardware;
 mod network;
 mod video;
 
+use auth_session::AuthSessionState;
 use database::sqlite::DbState;
 use hardware::serial::SerialState;
 use tauri::Manager;
@@ -16,6 +18,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(SerialState::default())
         .manage(DbState::default())
+        .manage(AuthSessionState::default())
         .setup(|app| {
             let state = app.state::<DbState>();
             let _ = database::sqlite::open_and_migrate(&state);
@@ -23,6 +26,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::app::get_app_info,
+            auth_session::auth_bind_session,
+            auth_session::auth_clear_session,
             hardware::serial::serial_list_ports,
             hardware::serial::serial_open,
             hardware::serial::serial_close,
@@ -33,6 +38,7 @@ pub fn run() {
             hardware::ethernet::list_network_interfaces,
             hardware::ethernet::probe_host,
             database::sqlite::db_init,
+            database::sqlite::db_schema_version,
             database::sqlite::db_append_event,
             database::sqlite::db_list_events,
             database::sqlite::db_upsert_setting,
@@ -45,6 +51,9 @@ pub fn run() {
             database::sqlite::db_upsert_recording,
             database::sqlite::db_list_recordings,
             database::sqlite::db_audit,
+            database::stations::station_list,
+            database::stations::station_upsert,
+            database::stations::station_delete,
         ])
         .run(tauri::generate_context!())
         .expect("ошибка запуска Aether Ground Station");

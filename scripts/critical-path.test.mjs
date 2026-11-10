@@ -46,8 +46,8 @@ console.log("ok: profile import validation");
 // --- workspace save shape present in store ---
 const ws = load("src/stores/workspaceStore.ts");
 assert.match(ws, /movePanel/);
-assert.match(ws, /ags-workspace-v1/);
-console.log("ok: workspace store persistence key");
+assert.match(ws, /SQLite via useSqliteSync/);
+console.log("ok: workspace store SQLite SSOT");
 
 // --- COM list surface ---
 const serial = load("src/modules/serial/SerialPanel.tsx");

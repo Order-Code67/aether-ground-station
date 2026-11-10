@@ -62,6 +62,9 @@ class DeviceManager {
     if (status === "Online") {
       this.clearReconnect(id);
     }
+    if (status === "Reconnecting") {
+      // keep timer; handler already running
+    }
     this.devices.set(id, next);
     this.emit();
   }
@@ -92,7 +95,7 @@ class DeviceManager {
       const card = this.devices.get(id);
       if (!card) return;
       if (card.status === "Online") return;
-      this.setStatus(id, "Connecting");
+      this.setStatus(id, "Reconnecting");
       void handler()
         .then(() => this.setStatus(id, "Online"))
         .catch((e) => {

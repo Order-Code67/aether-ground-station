@@ -1,14 +1,17 @@
 import { create } from "zustand";
+import { invoke } from "@tauri-apps/api/core";
 import type { AuthSession, AuthUser, UserRole } from "@/types/auth";
 import { ROLE_PERMISSIONS } from "@/types/auth";
 import { eventBus } from "@/services/events/eventBus";
 import {
+  dbAudit,
   dbGetJson,
   dbListUsers,
   dbUpsertJson,
   dbVerifyUserPassword,
   ensureDefaultAdmin,
 } from "@/services/database";
+import { isTauriRuntime } from "@/services/tauri";
 
 interface AuthState {
   session: AuthSession | null;
@@ -21,6 +24,18 @@ interface AuthState {
   refreshUsers: () => Promise<void>;
 }
 
+async function bindBackend(session: AuthSession | null): Promise<void> {
+  if (!isTauriRuntime()) return;
+  if (session) {
+    await invoke("auth_bind_session", {
+      username: session.user.username,
+      role: session.user.role,
+    });
+  } else {
+    await invoke("auth_clear_session");
+  }
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   ready: false,
@@ -30,11 +45,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await ensureDefaultAdmin();
     const users = await dbListUsers();
     const saved = await dbGetJson<AuthSession | null>("auth_session", null);
-    set({
-      users,
-      session: saved && !saved.user.disabled ? saved : null,
-      ready: true,
-    });
+    const session = saved && !saved.user.disabled ? saved : null;
+    await bindBackend(session);
+    set({ users, session, ready: true });
   },
 
   login: async (username, password) => {
@@ -56,16 +69,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       loggedInAt: new Date().toISOString(),
     };
     await dbUpsertJson("auth_session", session);
+    await bindBackend(session);
+    await dbAudit(user.id, "auth.login", { role: user.role });
     set({ session, users });
     eventBus.emit("info", "auth", `Вход: ${user.username} (${user.role})`);
     return true;
   },
 
   logout: () => {
+    const session = get().session;
     void dbUpsertJson("auth_session", null);
-    const name = get().session?.user.username;
+    void bindBackend(null);
+    if (session) {
+      void dbAudit(session.user.id, "auth.logout", {});
+      eventBus.emit("info", "auth", `Выход: ${session.user.username}`);
+    }
     set({ session: null });
-    if (name) eventBus.emit("info", "auth", `Выход: ${name}`);
   },
 
   can: (perm) => {

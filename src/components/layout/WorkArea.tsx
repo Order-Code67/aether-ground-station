@@ -6,6 +6,9 @@ import { WorkspaceView } from "@/modules/workspace";
 import { VideoView } from "@/modules/video";
 import { WalksnailView } from "@/modules/walksnail";
 import { MapView } from "@/modules/map";
+import { StationsView } from "@/modules/stations";
+import { TerrainView } from "@/modules/terrain";
+import { PanTiltView } from "@/modules/pantilt";
 import { DevicesView } from "@/modules/devices";
 import { NetworkView } from "@/modules/network";
 import { UsbView } from "@/modules/usb";
@@ -21,6 +24,9 @@ const VIEWS: Record<ModuleId, ComponentType> = {
   video: VideoView,
   walksnail: WalksnailView,
   map: MapView,
+  stations: StationsView,
+  terrain: TerrainView,
+  pantilt: PanTiltView,
   devices: DevicesView,
   network: NetworkView,
   usb: UsbView,

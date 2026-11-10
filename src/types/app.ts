@@ -1,9 +1,12 @@
-/** Идентификаторы модулей платформы (v0.2). */
+/** Идентификаторы модулей платформы (V2). */
 export type ModuleId =
   | "workspace"
   | "video"
   | "walksnail"
   | "map"
+  | "stations"
+  | "terrain"
+  | "pantilt"
   | "devices"
   | "network"
   | "usb"
@@ -25,80 +28,98 @@ export const MODULES: readonly ModuleDefinition[] = [
   {
     id: "workspace",
     label: "Рабочее пространство",
-    stage: 3,
-    description: "Настраиваемые панели и шаблоны компоновки",
-  },
-  {
-    id: "video",
-    label: "Видео",
-    stage: 5,
-    description: "Универсальный видеозахват и панели",
-  },
-  {
-    id: "walksnail",
-    label: "Walksnail",
-    stage: 5,
-    description: "Адаптер видео Walksnail через захват HDMI/USB",
+    stage: 2,
+    description: "Конструктор панелей",
   },
   {
     id: "map",
     label: "Карта",
+    stage: 4,
+    description: "MapLibre, офлайн и слои",
+  },
+  {
+    id: "stations",
+    label: "Станции",
+    stage: 5,
+    description: "Station Planner",
+  },
+  {
+    id: "terrain",
+    label: "Рельеф",
     stage: 6,
-    description: "MapLibre, OSM, рельеф и метки",
+    description: "Terrain Engine / DEM",
+  },
+  {
+    id: "video",
+    label: "Видео",
+    stage: 3,
+    description: "Video Engine",
+  },
+  {
+    id: "walksnail",
+    label: "Walksnail",
+    stage: 3,
+    description: "Адаптер Walksnail",
+  },
+  {
+    id: "pantilt",
+    label: "Pan-Tilt",
+    stage: 8,
+    description: "Мониторинг поворотного механизма",
   },
   {
     id: "devices",
     label: "Устройства",
-    stage: 8,
-    description: "Device Manager и карточки оборудования",
+    stage: 1,
+    description: "Device Manager",
   },
   {
     id: "network",
     label: "Сеть",
-    stage: 4,
-    description: "Ethernet и диагностика сети",
+    stage: 1,
+    description: "Network Manager",
   },
   {
     id: "usb",
     label: "USB",
-    stage: 4,
-    description: "Обнаружение и подключение USB",
+    stage: 1,
+    description: "USB enumeration",
   },
   {
     id: "serial",
     label: "COM / UART",
-    stage: 4,
-    description: "Поиск COM-портов и обмен данными",
+    stage: 1,
+    description: "COM-порты",
   },
   {
     id: "telemetry",
-    label: "Диагностика",
+    label: "Телеметрия",
     stage: 7,
-    description: "ESP32 / Arduino и JSON-телеметрия",
+    description: "Telemetry Engine",
   },
   {
     id: "archive",
     label: "Архив",
-    stage: 10,
-    description: "Видеозаписи и журнал событий",
+    stage: 8,
+    description: "Записи и журналы",
   },
   {
     id: "profiles",
     label: "Профили",
-    stage: 9,
-    description: "Профили комплексов наземных станций",
+    stage: 8,
+    description: "Комплексы и профили",
   },
   {
     id: "remote",
     label: "Удалённо",
-    stage: 13,
-    description: "Remote Connectivity — архитектура и API (v0.3)",
+    stage: 9,
+    description: "Remote Infrastructure",
   },
   {
     id: "settings",
     label: "Настройки",
-    stage: 2,
-    description: "Конфигурация приложения",
+    stage: 1,
+    description: "Конфигурация",
   },
 ] as const;
 

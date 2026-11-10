@@ -138,8 +138,8 @@ export function VideoPanel() {
           frames = 0;
           last = now;
         }
-      } else if (signal === "ok") {
-        setSignal("lost");
+      } else if (signal === "ok" || signal === "recording") {
+        setSignal("no-signal");
         setError("Нет сигнала");
       }
       raf = requestAnimationFrame(tick);

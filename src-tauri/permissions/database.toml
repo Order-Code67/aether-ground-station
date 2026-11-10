@@ -3,6 +3,7 @@ identifier = "allow-database"
 description = "SQLite persistence commands"
 commands.allow = [
   "db_init",
+  "db_schema_version",
   "db_append_event",
   "db_list_events",
   "db_upsert_setting",
@@ -14,5 +15,10 @@ commands.allow = [
   "db_verify_user_password",
   "db_upsert_recording",
   "db_list_recordings",
-  "db_audit"
+  "db_audit",
+  "station_list",
+  "station_upsert",
+  "station_delete",
+  "auth_bind_session",
+  "auth_clear_session"
 ]

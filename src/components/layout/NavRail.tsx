@@ -2,9 +2,11 @@ import {
   Archive,
   Cable,
   Cloud,
+  Compass,
   Gauge,
   LayoutGrid,
   Map,
+  Mountain,
   Radio,
   Settings,
   Snail,
@@ -16,6 +18,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { MODULES, type ModuleId } from "@/types";
 import { useNavigationStore } from "@/stores/navigationStore";
+import { useAuthStore } from "@/stores/authStore";
 import { cn } from "@/utils/cn";
 
 const ICONS: Record<ModuleId, LucideIcon> = {
@@ -23,6 +26,9 @@ const ICONS: Record<ModuleId, LucideIcon> = {
   video: Video,
   walksnail: Snail,
   map: Map,
+  stations: TowerControl,
+  terrain: Mountain,
+  pantilt: Compass,
   devices: Radio,
   network: Cable,
   usb: Usb,
@@ -37,6 +43,8 @@ const ICONS: Record<ModuleId, LucideIcon> = {
 export function NavRail() {
   const activeModule = useNavigationStore((s) => s.activeModule);
   const setActiveModule = useNavigationStore((s) => s.setActiveModule);
+  const canManage = useAuthStore((s) => s.can("manageDevices"));
+  const canEdit = useAuthStore((s) => s.can("editConfig"));
 
   return (
     <nav
@@ -56,16 +64,20 @@ export function NavRail() {
       {MODULES.map((mod) => {
         const Icon = ICONS[mod.id];
         const active = activeModule === mod.id;
+        const locked =
+          (mod.id === "settings" && !canEdit) ||
+          (mod.id === "remote" && !canManage && !canEdit);
         return (
           <button
             key={mod.id}
             type="button"
-            title={mod.label}
+            title={locked ? `${mod.label} (нет прав)` : mod.label}
             aria-label={mod.label}
             aria-current={active ? "page" : undefined}
+            disabled={locked}
             onClick={() => setActiveModule(mod.id)}
             className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-md transition-colors",
+              "flex h-10 w-10 items-center justify-center rounded-md transition-colors disabled:opacity-30",
               active
                 ? "bg-ags-elevated text-ags-accent"
                 : "text-ags-muted hover:bg-ags-elevated/60 hover:text-ags-fg",

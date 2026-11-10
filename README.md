@@ -2,9 +2,9 @@
 
 **Модульная настольная платформа (Windows 11)** для подключения и мониторинга наземных аппаратных комплексов: видеозахват, Walksnail VRX, COM/USB, сеть, карта, телеметрия, профили комплексов.
 
-> Версия **0.4.0** · Tauri 2 · React 19 · TypeScript · SQLite
+> Версия **0.5.0** (V2 Core+) · Tauri 2 · React 19 · TypeScript · SQLite
 
-[Архитектура](docs/ARCHITECTURE.md) · [Адаптеры](docs/ADAPTERS_API.md) · [Плагины](docs/PLUGINS.md) · [Remote API](docs/REMOTE_CONNECTIVITY.md) · [Выпуск](docs/RELEASE.md)
+[Аудит V2](docs/AETHER_V2_IMPLEMENTATION_AUDIT.md) · [Roadmap](docs/AETHER_V2_IMPLEMENTATION_ROADMAP.md) · [Прогресс](docs/AETHER_V2_PROGRESS.md) · [Схема БД](docs/SCHEMA.md) · [Архитектура](docs/ARCHITECTURE.md)
 
 ---
 
