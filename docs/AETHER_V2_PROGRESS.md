@@ -3,6 +3,14 @@
 **Версия кода:** 0.9.0 (+ S2 P0 hardening)  
 **Дата:** 2026-11-11
 
+## S4 — P2 evidence / terrain / telemetry / map (post-S3)
+
+- **DEM:** cargo tests Deflate + tiled Float32 + LZW→N/A.
+- **Telemetry:** `telemetry_list` + panel hydrate from SQLite on mount.
+- **Map:** `docs/MAP_OFFLINE_XYZ.md` + vitest offline/XYZ styles.
+- **HW lab:** `docs/AETHER_HW_LAB_CHECKLIST.md` template for matrix fill-in.
+- **Station e2e:** Playwright F (CRUD/AMSL path in preview).
+
 ## S3 — P1 reliability (post-S2)
 
 - **RTSP bridge:** stderr drain, kill on app exit, first-frame timeout → no-signal, phase field.

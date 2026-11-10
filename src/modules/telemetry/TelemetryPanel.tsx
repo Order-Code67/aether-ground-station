@@ -8,7 +8,10 @@ import {
   type NormalizedTelemetry,
   type TelemetrySample,
 } from "@/services/telemetry/normalize";
-import { appendTelemetryRecord } from "@/services/inventory";
+import {
+  appendTelemetryRecord,
+  listTelemetryRecords,
+} from "@/services/inventory";
 
 /**
  * Телеметрия через адаптеры нормализации — UI не знает wire-формат производителя.
@@ -17,6 +20,34 @@ export function TelemetryPanel() {
   const [latest, setLatest] = useState<NormalizedTelemetry | null>(null);
   const [history, setHistory] = useState<TelemetrySample[]>([]);
   const [rawErrors, setRawErrors] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    void (async () => {
+      try {
+        const rows = await listTelemetryRecords(200);
+        const samples: TelemetrySample[] = [];
+        let newest: NormalizedTelemetry | null = null;
+        for (const row of rows) {
+          try {
+            const msg = JSON.parse(row.payload) as NormalizedTelemetry;
+            if (!newest) newest = msg;
+            samples.push({
+              at: row.at,
+              voltageV: msg.voltageV ?? null,
+              temperatureC: msg.temperatureC ?? null,
+            });
+          } catch {
+            /* skip corrupt */
+          }
+        }
+        if (samples.length) setHistory(samples);
+        if (newest) setLatest(newest);
+      } catch {
+        /* preview / empty DB */
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;

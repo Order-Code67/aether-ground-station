@@ -26,6 +26,7 @@ commands.allow = [
   "maintenance_list",
   "maintenance_upsert",
   "telemetry_append",
+  "telemetry_list",
   "report_complex_summary",
   "report_complex_pdf",
   "auth_login",

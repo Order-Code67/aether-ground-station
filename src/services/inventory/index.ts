@@ -84,3 +84,12 @@ export async function appendTelemetryRecord(payload: {
   if (!isTauriRuntime()) return;
   await invoke("telemetry_append", payload);
 }
+
+export async function listTelemetryRecords(
+  limit = 200,
+): Promise<
+  Array<{ id: string; deviceId?: string | null; at: string; payload: string }>
+> {
+  if (!isTauriRuntime()) return [];
+  return invoke("telemetry_list", { limit });
+}

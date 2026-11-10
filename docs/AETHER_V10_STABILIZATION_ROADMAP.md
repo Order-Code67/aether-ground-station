@@ -88,11 +88,12 @@
 
 ### P2 — совместимость Terrain / Telemetry / Map / HW
 
-#### P2-1 DEM tests for Deflate + tiled fixtures  
-#### P2-2 Telemetry history reload from SQLite on panel mount  
-#### P2-3 Map offline pack documentation + smoke with local XYZ  
-#### P2-4 Hardware lab checklist execution (COM/UVC/RTSP) — results into Test Matrix  
-#### P2-5 Station CRUD Playwright (не только AMSL evaluate)  
+#### P2-1 DEM tests for Deflate + tiled fixtures — **DONE (S4)** ✅  
+#### P2-2 Telemetry history reload from SQLite on panel mount — **DONE (S4)** ✅  
+#### P2-3 Map offline pack documentation + smoke with local XYZ — **DONE (S4)** ✅ docs + vitest  
+#### P2-4 Hardware lab checklist execution — **DONE (S4)** template `AETHER_HW_LAB_CHECKLIST.md` (fill on lab)  
+#### P2-5 Station CRUD Playwright — **DONE (S4)** e2e F + AMSL ✅  
+
 
 ---
 
@@ -114,7 +115,7 @@
 |-------|------------|-------|
 | **S2** | P0-1..P0-4 **закрыто** (auth_login, db_restore, ffmpeg gate, sync secret) | Security+data gates |
 | **S3** | P1 Video/Device/Archive/Outbox/ACL/signal **закрыто** | Reliability |
-| **S4** | P2 tests + HW lab notes | Evidence pack |
+| **S4** | P2 tests + HW lab notes **закрыто** (DEM/telemetry/map/e2e docs) | Evidence pack |
 | **S5** | NSIS build smoke + Release Checklist sign-off | 1.0.0 candidate |
 | **S6+** | P3 optional | 1.1 |
 

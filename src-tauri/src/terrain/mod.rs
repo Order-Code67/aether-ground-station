@@ -751,18 +751,53 @@ mod tests {
 
     #[test]
     fn samples_uncompressed_float_geotiff() {
-        let path = write_test_float_geotiff();
+        let path = write_test_float_geotiff(false, false);
         let s = sample_elevation(path.to_str().unwrap(), 49.995, 30.005).unwrap();
         assert!(!s.missing, "{}", s.message);
         assert!((s.elevation_m.unwrap() - 100.0).abs() < 0.5);
     }
 
-    fn write_test_float_geotiff() -> PathBuf {
-        // Minimal valid GeoTIFF Float32 2x2, uncompressed, one strip
+    #[test]
+    fn samples_deflate_float_geotiff() {
+        let path = write_test_float_geotiff(true, false);
+        let s = sample_elevation(path.to_str().unwrap(), 49.995, 30.005).unwrap();
+        assert!(!s.missing, "{}", s.message);
+        assert!((s.elevation_m.unwrap() - 100.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn samples_tiled_float_geotiff() {
+        let path = write_test_float_geotiff(false, true);
+        let s = sample_elevation(path.to_str().unwrap(), 49.995, 30.005).unwrap();
+        assert!(!s.missing, "{}", s.message);
+        assert!((s.elevation_m.unwrap() - 100.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn unsupported_lzw_returns_missing() {
+        let path = write_test_float_geotiff_lzw_marked();
+        let s = sample_elevation(path.to_str().unwrap(), 49.995, 30.005).unwrap();
+        assert!(s.missing, "LZW must be N/A");
+    }
+
+    /// `deflate`: zlib-wrap strip; `tiled`: TileWidth/Height instead of strips.
+    fn write_test_float_geotiff(deflate: bool, tiled: bool) -> PathBuf {
+        use flate2::write::ZlibEncoder;
+        use flate2::Compression;
+        use std::io::Write as _;
+
         let mut img = Vec::new();
         for v in [100.0f32, 110.0, 120.0, 130.0] {
             img.extend_from_slice(&v.to_le_bytes());
         }
+        let payload = if deflate {
+            let mut enc = ZlibEncoder::new(Vec::new(), Compression::default());
+            enc.write_all(&img).unwrap();
+            enc.finish().unwrap()
+        } else {
+            img
+        };
+
         let scale = {
             let mut d = Vec::new();
             d.extend_from_slice(&0.01f64.to_le_bytes());
@@ -778,9 +813,9 @@ mod tests {
             d
         };
 
-        // IFD at 8, 10 entries
-        let entries = 10u16;
-        let ifd_len = 2 + 10 * 12 + 4;
+        // strip: 10 tags; tiled: 11 tags (TileWidth/Length/Offsets/ByteCounts replace strip trio)
+        let entries = if tiled { 11u16 } else { 10u16 };
+        let ifd_len = 2 + (entries as usize) * 12 + 4;
         let ext_start = 8 + ifd_len;
         let scale_off = ext_start as u32;
         let tie_off = scale_off + scale.len() as u32;
@@ -805,21 +840,50 @@ mod tests {
         write_entry(&mut file, 256, 3, 1, &2u16.to_le_bytes());
         write_entry(&mut file, 257, 3, 1, &2u16.to_le_bytes());
         write_entry(&mut file, 258, 3, 1, &32u16.to_le_bytes());
-        write_entry(&mut file, 259, 3, 1, &1u16.to_le_bytes());
-        write_entry(&mut file, 273, 4, 1, &img_off.to_le_bytes());
-        write_entry(&mut file, 278, 4, 1, &2u32.to_le_bytes());
-        write_entry(&mut file, 279, 4, 1, &16u32.to_le_bytes());
+        let comp: u16 = if deflate { 8 } else { 1 };
+        write_entry(&mut file, 259, 3, 1, &comp.to_le_bytes());
+        if tiled {
+            write_entry(&mut file, 322, 3, 1, &2u16.to_le_bytes()); // TileWidth
+            write_entry(&mut file, 323, 3, 1, &2u16.to_le_bytes()); // TileLength
+            write_entry(&mut file, 324, 4, 1, &img_off.to_le_bytes());
+            write_entry(&mut file, 325, 4, 1, &(payload.len() as u32).to_le_bytes());
+        } else {
+            write_entry(&mut file, 273, 4, 1, &img_off.to_le_bytes());
+            write_entry(&mut file, 278, 4, 1, &2u32.to_le_bytes());
+            write_entry(&mut file, 279, 4, 1, &(payload.len() as u32).to_le_bytes());
+        }
         write_entry(&mut file, 339, 3, 1, &3u16.to_le_bytes());
         write_entry(&mut file, 33550, 12, 3, &scale_off.to_le_bytes());
         write_entry(&mut file, 33922, 12, 6, &tie_off.to_le_bytes());
         file.extend_from_slice(&0u32.to_le_bytes());
-        assert_eq!(file.len(), ext_start as usize);
+        assert_eq!(file.len(), ext_start);
         file.extend_from_slice(&scale);
         file.extend_from_slice(&tie);
-        file.extend_from_slice(&img);
+        file.extend_from_slice(&payload);
 
-        let path = std::env::temp_dir().join("ags_dem_f32.tif");
+        let name = if tiled {
+            "ags_dem_f32_tiled.tif"
+        } else if deflate {
+            "ags_dem_f32_deflate.tif"
+        } else {
+            "ags_dem_f32.tif"
+        };
+        let path = std::env::temp_dir().join(name);
         std::fs::write(&path, &file).unwrap();
         path
     }
+
+    fn write_test_float_geotiff_lzw_marked() -> PathBuf {
+        // Same layout as strip float DEM but Compression=5 (LZW) — must N/A.
+        let path = write_test_float_geotiff(false, false);
+        let mut file = std::fs::read(&path).unwrap();
+        // IFD entry for tag 259 is the 4th entry (index 3): offset 8+2+3*12 = 46
+        // value short at +8 within entry → absolute 54
+        let comp_val_off = 8 + 2 + 3 * 12 + 8;
+        file[comp_val_off..comp_val_off + 2].copy_from_slice(&5u16.to_le_bytes());
+        let out = std::env::temp_dir().join("ags_dem_f32_lzw.tif");
+        std::fs::write(&out, &file).unwrap();
+        out
+    }
+
 }

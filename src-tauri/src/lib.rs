@@ -83,6 +83,7 @@ pub fn run() {
             database::inventory::maintenance_list,
             database::inventory::maintenance_upsert,
             database::inventory::telemetry_append,
+            database::inventory::telemetry_list,
             database::inventory::report_complex_summary,
         ])
         .build(tauri::generate_context!())

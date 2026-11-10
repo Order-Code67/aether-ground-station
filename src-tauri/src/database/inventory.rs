@@ -174,6 +174,15 @@ pub fn maintenance_upsert(
     })
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TelemetryRow {
+    pub id: String,
+    pub device_id: Option<String>,
+    pub at: String,
+    pub payload: String,
+}
+
 #[tauri::command]
 pub fn telemetry_append(
     state: State<'_, DbState>,
@@ -193,6 +202,37 @@ pub fn telemetry_append(
         )
         .map_err(|e| e.to_string())?;
         Ok(())
+    })
+}
+
+#[tauri::command]
+pub fn telemetry_list(
+    state: State<'_, DbState>,
+    limit: Option<i64>,
+) -> Result<Vec<TelemetryRow>, String> {
+    let lim = limit.unwrap_or(200).clamp(1, 1000);
+    with_conn(&state, |conn| {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, device_id, at, payload FROM telemetry_records
+                 ORDER BY at DESC LIMIT ?1",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![lim], |row| {
+                Ok(TelemetryRow {
+                    id: row.get(0)?,
+                    device_id: row.get(1)?,
+                    at: row.get(2)?,
+                    payload: row.get(3)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(|e| e.to_string())?);
+        }
+        Ok(out)
     })
 }
 

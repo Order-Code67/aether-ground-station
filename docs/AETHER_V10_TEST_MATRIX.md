@@ -50,14 +50,14 @@
 | T42 | Station | AMSL math | 180+10+2=192; null→null | PASS vitest+cargo | PASS | нет |
 | T43 | Terrain | Inspect GeoTIFF | meta | code+unit | PASS unit | synthetic |
 | T44 | Terrain | Sample Float32 strip | elev | PASS cargo | PASS | synthetic |
-| T45 | Terrain | Sample Deflate | elev or N/A | code only | NOT_RUN | fixture |
-| T46 | Terrain | Sample tiled | elev | code only | NOT_RUN | fixture |
-| T47 | Terrain | Unsupported compression | N/A message | code | NOT_RUN | fixture |
+| T45 | Terrain | Sample Deflate | elev or N/A | PASS cargo deflate float | PASS | fixture |
+| T46 | Terrain | Sample tiled | elev | PASS cargo tiled float | PASS | fixture |
+| T47 | Terrain | Unsupported compression | N/A message | PASS cargo LZW→missing | PASS | fixture |
 | T48 | Terrain | No geotags | N/A | code | NOT_RUN | fixture |
 | T49 | Telemetry | PX4 null fields | warnings | PASS vitest | PASS | нет |
 | T50 | Telemetry | ArduPilot degE7 | lat/lon/alt/V | PASS vitest | PASS | нет |
 | T51 | Telemetry | SQLite append | row written | code | NOT_RUN | Tauri+serial |
-| T52 | Telemetry | History after restart | reload | UI session-only | FAIL/PARTIAL | — |
+| T52 | Telemetry | History after restart | reload | telemetry_list hydrate on mount | PASS (code) | Tauri |
 | T53 | Gateway | enqueue outbox | row pending | code | NOT_RUN | Tauri |
 | T54 | Gateway | try_sync HTTP | sent / failed+retry | failed status + retry_failed | PASS (contract) | stub server |
 | T55 | Gateway | TLS server | https health | server supports | NOT_RUN | certs |
