@@ -19,6 +19,16 @@ commands.allow = [
   "station_list",
   "station_upsert",
   "station_delete",
+  "inventory_list",
+  "inventory_upsert",
+  "maintenance_list",
+  "maintenance_upsert",
+  "telemetry_append",
+  "report_complex_summary",
   "auth_bind_session",
-  "auth_clear_session"
+  "auth_clear_session",
+  "video_ffmpeg_status",
+  "video_probe_rtsp",
+  "terrain_inspect_geotiff",
+  "terrain_register_source"
 ]

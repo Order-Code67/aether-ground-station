@@ -1,12 +1,15 @@
 import {
   Archive,
+  Boxes,
   Cable,
   Cloud,
   Compass,
+  FileText,
   Gauge,
   LayoutGrid,
   Map,
   Mountain,
+  Puzzle,
   Radio,
   Settings,
   Snail,
@@ -35,6 +38,9 @@ const ICONS: Record<ModuleId, LucideIcon> = {
   serial: Waypoints,
   telemetry: Gauge,
   archive: Archive,
+  inventory: Boxes,
+  reports: FileText,
+  plugins: Puzzle,
   profiles: TowerControl,
   remote: Cloud,
   settings: Settings,
@@ -45,6 +51,7 @@ export function NavRail() {
   const setActiveModule = useNavigationStore((s) => s.setActiveModule);
   const canManage = useAuthStore((s) => s.can("manageDevices"));
   const canEdit = useAuthStore((s) => s.can("editConfig"));
+  const canPlugins = useAuthStore((s) => s.can("managePlugins"));
 
   return (
     <nav
@@ -66,6 +73,7 @@ export function NavRail() {
         const active = activeModule === mod.id;
         const locked =
           (mod.id === "settings" && !canEdit) ||
+          (mod.id === "plugins" && !canPlugins) ||
           (mod.id === "remote" && !canManage && !canEdit);
         return (
           <button

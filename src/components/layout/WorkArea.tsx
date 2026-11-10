@@ -15,6 +15,9 @@ import { UsbView } from "@/modules/usb";
 import { SerialView } from "@/modules/serial";
 import { TelemetryView } from "@/modules/telemetry";
 import { ArchiveView } from "@/modules/archive";
+import { InventoryView } from "@/modules/inventory";
+import { ReportsView } from "@/modules/reports";
+import { PluginsView } from "@/modules/plugins";
 import { ProfilesView } from "@/modules/profiles";
 import { RemoteView } from "@/modules/remote";
 import { SettingsView } from "@/modules/settings";
@@ -33,6 +36,9 @@ const VIEWS: Record<ModuleId, ComponentType> = {
   serial: SerialView,
   telemetry: TelemetryView,
   archive: ArchiveView,
+  inventory: InventoryView,
+  reports: ReportsView,
+  plugins: PluginsView,
   profiles: ProfilesView,
   remote: RemoteView,
   settings: SettingsView,

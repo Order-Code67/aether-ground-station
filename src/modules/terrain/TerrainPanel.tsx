@@ -9,12 +9,54 @@ import {
 } from "@/services/terrain/terrainEngine";
 import { emitDomain } from "@/services/events/domainEvents";
 import { listStations } from "@/services/stations";
+import { invoke } from "@tauri-apps/api/core";
+import { isTauriRuntime } from "@/services/tauri";
 
 export function TerrainPanel() {
   const [profile, setProfile] = useState<TerrainProfilePoint[]>([]);
-  const [meta] = useState(() => getDemMeta());
+  const [meta, setMeta] = useState(() => getDemMeta());
   const [manualElev, setManualElev] = useState("");
+  const [geotiffPath, setGeotiffPath] = useState("");
   const [note, setNote] = useState<string | null>(null);
+
+  const inspectGeoTiff = async () => {
+    if (!geotiffPath.trim()) return;
+    if (!isTauriRuntime()) {
+      setNote("GeoTIFF inspect только в desktop");
+      return;
+    }
+    try {
+      const info = await invoke<{
+        validTiff: boolean;
+        width?: number;
+        height?: number;
+        message: string;
+        path: string;
+      }>("terrain_inspect_geotiff", { path: geotiffPath.trim() });
+      setNote(info.message);
+      if (info.validTiff) {
+        await invoke("terrain_register_source", {
+          id: `dem_${Date.now().toString(36)}`,
+          name: info.path,
+          sourceType: "geotiff",
+          path: info.path,
+          resolutionM: null,
+        });
+        setMeta({
+          id: "geotiff",
+          name: info.path,
+          sourceType: "geotiff",
+          path: info.path,
+        });
+        emitDomain("TerrainDataLoaded", "terrain", info.message, {
+          width: info.width,
+          height: info.height,
+        });
+      }
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const runProfile = async () => {
     const stations = await listStations();
@@ -81,6 +123,19 @@ export function TerrainPanel() {
         ). Геометрический профиль ≠ прогноз радиоканала.
       </p>
       <div className="flex flex-wrap gap-2">
+        <input
+          className="min-w-[14rem] flex-1 rounded border border-ags-border bg-ags-elevated px-2 py-1 font-mono text-xs"
+          placeholder="Путь к GeoTIFF"
+          value={geotiffPath}
+          onChange={(e) => setGeotiffPath(e.target.value)}
+        />
+        <button
+          type="button"
+          className="rounded border border-ags-border px-2 py-1"
+          onClick={() => void inspectGeoTiff()}
+        >
+          Inspect GeoTIFF
+        </button>
         <input
           className="w-32 rounded border border-ags-border bg-ags-elevated px-2 py-1 font-mono text-xs"
           placeholder="Ручная AMSL"

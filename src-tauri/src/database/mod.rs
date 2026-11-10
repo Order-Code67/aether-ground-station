@@ -1,3 +1,4 @@
+pub mod inventory;
 pub mod migrations;
 pub mod permissions;
 pub mod sqlite;

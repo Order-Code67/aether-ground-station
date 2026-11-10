@@ -12,6 +12,7 @@ import type { CaptureDeviceInfo, VideoSignalState } from "@/types";
 import { eventBus } from "@/services/events/eventBus";
 import { useArchiveStore } from "@/stores/archiveStore";
 import { deviceManager } from "@/services/devices/deviceManager";
+import { getFfmpegStatus } from "@/services/video/ffmpeg";
 
 export function VideoPanel() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -30,7 +31,14 @@ export function VideoPanel() {
   const [fps, setFps] = useState<number | undefined>();
   const [size, setSize] = useState<{ w?: number; h?: number }>({});
   const [recording, setRecording] = useState(false);
+  const [ffmpegMsg, setFfmpegMsg] = useState<string | null>(null);
   const addClip = useArchiveStore((s) => s.addClip);
+
+  useEffect(() => {
+    void getFfmpegStatus()
+      .then((s) => setFfmpegMsg(s.message))
+      .catch(() => setFfmpegMsg(null));
+  }, []);
 
   const refreshDevices = async () => {
     try {
@@ -277,7 +285,7 @@ export function VideoPanel() {
         )}
       </div>
 
-      <div className="flex gap-4 font-mono text-[11px] text-ags-muted">
+      <div className="flex flex-wrap gap-4 font-mono text-[11px] text-ags-muted">
         <span>Адаптер: {adapterKind}</span>
         <span>Сигнал: {signal}</span>
         <span>FPS: {fps ?? "—"}</span>
@@ -285,6 +293,7 @@ export function VideoPanel() {
           Разрешение:{" "}
           {size.w && size.h ? `${size.w}×${size.h}` : "—"}
         </span>
+        {ffmpegMsg && <span title={ffmpegMsg}>FFmpeg: {ffmpegMsg.slice(0, 48)}</span>}
       </div>
     </div>
   );

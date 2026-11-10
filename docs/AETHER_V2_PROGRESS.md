@@ -1,42 +1,26 @@
 # V2 Implementation Progress
 
-**Версия кода:** 0.5.0  
+**Версия кода:** 0.6.0  
 **Дата:** 2026-11-11
 
-## Выполнено в этой итерации
+## 0.6.0
 
-### Этап 1 — Core
-- Versioned SQLite migrations (`schema_migrations`, v1→v2)
-- Таблицы stations/complexes/terrain/inventory/diagnostics и др.
-- Permission Engine: `auth_bind_session` + ACL на serial write/open + station upsert
-- UI: `can()` на NavRail (settings/remote), Station Planner manageDevices
-- Typed domain events (`domainEvents.ts`)
-- DiagnosticsManager skeleton
-- DeviceStatus `Reconnecting`
-- SSOT: убран zustand persist localStorage для workspace/profiles → только SQLite sync
-- Vitest: AMSL + profile import; `cargo test` AMSL formula
-- docs/SCHEMA.md
+- **Video Capture Service (partial):** `video_ffmpeg_status`, `video_probe_rtsp` (FFmpeg/ffprobe PATH); RTSP adapter probes before decode bridge.
+- **Terrain GeoTIFF:** TIFF header/IFD inspect + register `terrain_sources`; elevation sampling still N/A until raster DEM reader.
+- **Inventory / Maintenance / Reports** modules + SQLite commands.
+- **Plugin Manager** registry (deny `*` / `system.exec`).
+- **Telemetry → SQLite** `telemetry_records` on each normalized sample.
+- **Playwright** e2e smoke (`npm run test:e2e`) for login shell + AMSL invariant.
+- Rust unit tests: AMSL + minimal TIFF parse.
 
-### Этап 2 — Workspace
-- Сохранён DnD constructor; SSOT через SQLite
+## 0.5.0
 
-### Этап 3 — Video
-- Расширены состояния сигнала (§6): no-signal, recording, error
+- Versioned SQLite migrations, Station Planner, Terrain profile, Pan-Tilt modes, permissions bind, Vitest, SSOT.
 
-### Этап 4–6 — Map / Station / Terrain
-- Station Planner UI + CRUD (SQLite)
-- AMSL formula enforced FE+BE
-- Map markers для станций + азимут в popup
-- Terrain Engine: adapters, linear profile, N/A без DEM, ручные отметки
+## Remaining
 
-### Этап 8 — Pan-Tilt
-- Simulation / Monitoring / Local Device Status (без remote actuators)
-
-## Ещё не сделано (следующие итерации)
-- FFmpeg Video Capture Service (реальный RTSP)
-- GeoTIFF DEM parser
-- PostgreSQL / Central Gateway runtime
-- Playwright E2E A–E
-- Plugin Manager runtime
-- Полный Inventory/Maintenance/Reports UI
-- Signed NSIS + updater
+- Native RTSP→frame bridge / bundled FFmpeg
+- Full GeoTIFF elevation sampling
+- PostgreSQL Central Gateway
+- PDF reports, signed NSIS + updater
+- Full Playwright scenarios B–E on Tauri

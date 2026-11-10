@@ -3,6 +3,7 @@ mod commands;
 mod database;
 mod hardware;
 mod network;
+mod terrain;
 mod video;
 
 use auth_session::AuthSessionState;
@@ -37,6 +38,10 @@ pub fn run() {
             hardware::usb::list_usb_devices,
             hardware::ethernet::list_network_interfaces,
             hardware::ethernet::probe_host,
+            video::video_ffmpeg_status,
+            video::video_probe_rtsp,
+            terrain::terrain_inspect_geotiff,
+            terrain::terrain_register_source,
             database::sqlite::db_init,
             database::sqlite::db_schema_version,
             database::sqlite::db_append_event,
@@ -54,6 +59,12 @@ pub fn run() {
             database::stations::station_list,
             database::stations::station_upsert,
             database::stations::station_delete,
+            database::inventory::inventory_list,
+            database::inventory::inventory_upsert,
+            database::inventory::maintenance_list,
+            database::inventory::maintenance_upsert,
+            database::inventory::telemetry_append,
+            database::inventory::report_complex_summary,
         ])
         .run(tauri::generate_context!())
         .expect("ошибка запуска Aether Ground Station");

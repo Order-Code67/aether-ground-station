@@ -8,6 +8,7 @@ import {
   type NormalizedTelemetry,
   type TelemetrySample,
 } from "@/services/telemetry/normalize";
+import { appendTelemetryRecord } from "@/services/inventory";
 
 /**
  * Телеметрия через адаптеры нормализации — UI не знает wire-формат производителя.
@@ -42,6 +43,12 @@ export function TelemetryPanel() {
             ...prev,
           ].slice(0, 200),
         );
+        void appendTelemetryRecord({
+          id: `tel_${Date.now().toString(36)}`,
+          deviceId: msg.deviceId,
+          at: msg.receivedAt,
+          payload: JSON.stringify(msg),
+        });
         eventBus.emit(
           "info",
           "telemetry",

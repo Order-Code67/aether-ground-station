@@ -13,6 +13,9 @@ export type ModuleId =
   | "serial"
   | "telemetry"
   | "archive"
+  | "inventory"
+  | "reports"
+  | "plugins"
   | "profiles"
   | "remote"
   | "settings";
@@ -102,6 +105,24 @@ export const MODULES: readonly ModuleDefinition[] = [
     label: "Архив",
     stage: 8,
     description: "Записи и журналы",
+  },
+  {
+    id: "inventory",
+    label: "Инвентарь",
+    stage: 8,
+    description: "Equipment / Maintenance",
+  },
+  {
+    id: "reports",
+    label: "Отчёты",
+    stage: 8,
+    description: "Reports Manager",
+  },
+  {
+    id: "plugins",
+    label: "Плагины",
+    stage: 10,
+    description: "Plugin Manager",
   },
   {
     id: "profiles",

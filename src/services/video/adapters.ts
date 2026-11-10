@@ -1,6 +1,7 @@
 import type { CaptureDeviceInfo } from "@/types";
 import { eventBus } from "@/services/events/eventBus";
 import { listCaptureDevices, openCaptureStream } from "./captureService";
+import { getFfmpegStatus, probeRtsp } from "./ffmpeg";
 
 export type VideoAdapterKind = "mediadevices" | "rtsp" | "webrtc";
 
@@ -11,7 +12,6 @@ export interface VideoAdapter {
   open(sourceId: string): Promise<MediaStream>;
 }
 
-/** UVC / HDMI capture via WebView2 MediaDevices (current). Rust/FFmpeg service — next. */
 export const mediaDevicesAdapter: VideoAdapter = {
   kind: "mediadevices",
   label: "UVC / HDMI (MediaDevices)",
@@ -20,29 +20,39 @@ export const mediaDevicesAdapter: VideoAdapter = {
 };
 
 /**
- * RTSP adapter — URL as source id. Browser MediaStream from RTSP requires
- * native Video Capture Service; until then we surface a clear error.
+ * RTSP: probe via FFmpeg/ffprobe (Video Capture Service).
+ * Decode→MediaStream in WebView still requires native frame bridge — probe validates source.
  */
 export const rtspAdapter: VideoAdapter = {
   kind: "rtsp",
-  label: "RTSP",
+  label: "RTSP (FFmpeg probe)",
   async listSources() {
     return [];
   },
   async open(url: string) {
     if (!url.trim()) throw new Error("Укажите RTSP URL");
+    const status = await getFfmpegStatus();
+    if (!status.available) {
+      eventBus.emit("warning", "video-rtsp", status.message);
+      throw new Error(status.message);
+    }
+    const probe = await probeRtsp(url.trim());
+    if (!probe.ok) {
+      const msg = probe.error ?? "Нет сигнала / RTSP недоступен";
+      eventBus.emit("error", "video-rtsp", msg);
+      throw new Error(msg);
+    }
     eventBus.emit(
-      "warning",
+      "info",
       "video-rtsp",
-      "RTSP требует Video Capture Service (Rust/FFmpeg). Поток не открыт.",
+      `RTSP OK (${probe.latencyMs ?? "?"} мс). Декод в WebView — следующий этап Video Capture Service.`,
     );
     throw new Error(
-      "RTSP: нативный захват ещё не подключён. Используйте UVC/HDMI или дождитесь Video Capture Service.",
+      "RTSP источник доступен (probe OK), но кадры в UI ещё требуют native decode bridge. Используйте UVC/HDMI для просмотра.",
     );
   },
 };
 
-/** WebRTC adapter — separate from MediaDevices; needs signaling endpoint. */
 export const webrtcAdapter: VideoAdapter = {
   kind: "webrtc",
   label: "WebRTC",
