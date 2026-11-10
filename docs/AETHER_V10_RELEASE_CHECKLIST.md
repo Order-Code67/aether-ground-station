@@ -47,7 +47,7 @@ npm run build
 - [ ] `npm run tauri:dev` — login, nav, module open без crash  
 - [ ] `$env:AGS_TAURI_URL="http://127.0.0.1:1424"; npm run test:e2e:tauri` PASS  
 - [x] `npm run tauri:build` → NSIS `Aether Ground Station_1.0.0_x64-setup.exe`  
-- [ ] `npm run smoke:install` (или ручная установка) — приложение стартует  
+- [x] `npm run smoke:install` — приложение стартует (1.0.0 post-install OK)  
 
 ---
 
@@ -113,8 +113,8 @@ npm run build
 
 ## 7. Публикация (только после согласования)
 
-- [ ] Tag `v1.0.0`  
-- [ ] GitHub Release + NSIS artifact  
+- [x] Tag `v1.0.0`  
+- [x] GitHub Release + NSIS artifact  
 - [ ] Не force-push main  
 - [ ] Не публиковать secrets (updater private key, certs)  
 
