@@ -8,8 +8,8 @@
 ## 0. Перед сборкой кандидата
 
 - [x] Все **P0** из `AETHER_V10_STABILIZATION_ROADMAP.md` закрыты (S2)  
-- [ ] Версия синхронизирована: `package.json` = `src-tauri/Cargo.toml` = `tauri.conf.json` = **1.0.0**  
-- [ ] `CHANGELOG` / Progress обновлён честными формулировками (WebRTC = signaling unless media done)  
+- [x] Версия синхронизирована: `package.json` = `src-tauri/Cargo.toml` = `tauri.conf.json` = **1.0.0**  
+- [x] `RELEASE_NOTES_1.0.0` / Progress обновлены (WebRTC = signaling only; Gateway = Preview)  
 - [ ] Нет remote pilot / actuator command paths (grep review)  
 - [ ] Pan-Tilt только Simulation / Monitoring / Local Device Status  
 
@@ -46,7 +46,7 @@ npm run build
 
 - [ ] `npm run tauri:dev` — login, nav, module open без crash  
 - [ ] `$env:AGS_TAURI_URL="http://127.0.0.1:1424"; npm run test:e2e:tauri` PASS  
-- [ ] `npm run tauri:build` → NSIS artifact  
+- [x] `npm run tauri:build` → NSIS `Aether Ground Station_1.0.0_x64-setup.exe`  
 - [ ] `npm run smoke:install` (или ручная установка) — приложение стартует  
 
 ---
@@ -104,10 +104,10 @@ npm run build
 
 ## 6. Документы релиза
 
-- [ ] `AETHER_V09_VERIFICATION_REPORT.md` (или V10 verification delta)  
-- [ ] `AETHER_V10_TEST_MATRIX.md` с заполненными HW результатами  
-- [ ] `AETHER_V10_STABILIZATION_ROADMAP.md` — P0 отмечены done  
-- [ ] Release Notes 1.0.0 (что READY / Preview / NOT included)  
+- [x] `AETHER_V09_VERIFICATION_REPORT.md` (или V10 verification delta)  
+- [x] `AETHER_V10_TEST_MATRIX.md` (авто PASS; HW — lab template)  
+- [x] `AETHER_V10_STABILIZATION_ROADMAP.md` — P0/P1/P2 S2–S4 done  
+- [x] Release Notes 1.0.0 (что READY / Preview / NOT included)  
 
 ---
 

@@ -106,11 +106,14 @@ export function RemoteView() {
   return (
     <div className="flex h-full flex-col gap-6 overflow-auto p-8">
       <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-ags-dim">V2 Gateway</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-ags-dim">
+          Gateway Preview
+        </p>
         <h1 className="mt-2 text-2xl font-semibold">Удалённое подключение</h1>
         <p className="mt-2 max-w-2xl text-sm text-ags-muted">
-          Central Gateway: outbox → HTTP sync, PostgreSQL probe. Локальный SQLite —
-          SSOT offline. Команды полёта / актуаторов через remote не передаются.
+          Central Gateway (Preview): outbox → HTTP sync, PostgreSQL probe. Локальный
+          SQLite — SSOT offline. Команды полёта / актуаторов через remote не
+          передаются.
         </p>
       </div>
 

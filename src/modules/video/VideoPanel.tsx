@@ -333,7 +333,7 @@ export function VideoPanel() {
         >
           <option value="mediadevices">UVC / HDMI</option>
           <option value="rtsp">RTSP</option>
-          <option value="webrtc">WebRTC</option>
+          <option value="webrtc">WebRTC (signaling only)</option>
         </select>
         {adapterKind === "mediadevices" ? (
           <>

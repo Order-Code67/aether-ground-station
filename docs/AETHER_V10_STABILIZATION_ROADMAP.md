@@ -116,7 +116,7 @@
 | **S2** | P0-1..P0-4 **закрыто** (auth_login, db_restore, ffmpeg gate, sync secret) | Security+data gates |
 | **S3** | P1 Video/Device/Archive/Outbox/ACL/signal **закрыто** | Reliability |
 | **S4** | P2 tests + HW lab notes **закрыто** (DEM/telemetry/map/e2e docs) | Evidence pack |
-| **S5** | NSIS build smoke + Release Checklist sign-off | 1.0.0 candidate |
+| **S5** | NSIS build smoke + Release Checklist / Notes **1.0.0** | 1.0.0 candidate |
 | **S6+** | P3 optional | 1.1 |
 
 ---

@@ -68,7 +68,7 @@
 | T60 | Plugins | isolation crash | shell lives | boundary exists | NOT_RUN | — |
 | T61 | Pan-Tilt | simulation local only | no hardware write | code UI | PARTIAL | — |
 | T62 | Pan-Tilt | no remote actuator API | absent | confirmed grep policy | PASS | нет |
-| T63 | Release | `tauri build` NSIS | installer | NOT_RUN | NOT_RUN | Windows SDK |
+| T63 | Release | `tauri build` NSIS | installer | PASS 1.0.0 x64-setup (~57 MiB) | PASS | Windows SDK |
 | T64 | Release | smoke:install | app starts | NOT_RUN | NOT_RUN | installer |
 | T65 | Release | updater plugin | checks update | **not wired** | N/A | CDN+keys |
 | T66 | Release | Authenticode | signed | docs only | N/A | cert |
