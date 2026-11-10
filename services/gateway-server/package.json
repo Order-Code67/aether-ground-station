@@ -1,0 +1,16 @@
+{
+  "name": "aether-gateway-server",
+  "private": true,
+  "type": "module",
+  "version": "0.9.0",
+  "description": "Aether Central Gateway sync receiver (PostgreSQL optional)",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.16.0"
+  },
+  "optionalDependencies": {
+    "pg": "^8.16.0"
+  }
+}

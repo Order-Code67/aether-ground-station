@@ -82,20 +82,46 @@ export const rtspAdapter: VideoAdapter = {
 
 export const webrtcAdapter: VideoAdapter = {
   kind: "webrtc",
-  label: "WebRTC",
+  label: "WebRTC (signaling)",
   async listSources() {
     return [];
   },
-  async open(signalingUrl: string) {
-    if (!signalingUrl.trim()) throw new Error("Укажите signaling URL");
-    eventBus.emit(
-      "warning",
-      "video-webrtc",
-      "WebRTC-адаптер ожидает signaling endpoint Remote/Video Relay.",
-    );
-    throw new Error(
-      "WebRTC: нет signaling endpoint. Настройте Remote Gateway или локальный relay.",
-    );
+  async open(signalingUrl: string): Promise<MediaStream> {
+    const url = signalingUrl.trim() || "ws://127.0.0.1:8790/?room=ags";
+    if (!(url.startsWith("ws://") || url.startsWith("wss://"))) {
+      throw new Error("Signaling URL: ws:// или wss://");
+    }
+    await new Promise<void>((_resolve, reject) => {
+      const ws = new WebSocket(url);
+      const t = window.setTimeout(() => {
+        ws.close();
+        reject(new Error("WebRTC signaling timeout — запустите npm run webrtc:relay"));
+      }, 4000);
+      ws.onopen = () => {
+        window.clearTimeout(t);
+        ws.send(JSON.stringify({ type: "hello", from: "ags-desktop" }));
+        ws.close();
+        eventBus.emit(
+          "info",
+          "video-webrtc",
+          `Signaling OK (${url}). Media SFU — отдельный этап; кадры через RTSP bridge или UVC.`,
+        );
+        reject(
+          new Error(
+            "Signaling доступен, но MediaStream bridge ещё не подключён. Используйте RTSP/UVC для просмотра.",
+          ),
+        );
+      };
+      ws.onerror = () => {
+        window.clearTimeout(t);
+        reject(
+          new Error(
+            "WebRTC signaling недоступен. npm run webrtc:relay → ws://127.0.0.1:8790",
+          ),
+        );
+      };
+    });
+    throw new Error("unreachable");
   },
 };
 

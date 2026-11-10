@@ -1,10 +1,21 @@
 # Release: NSIS + code signing + updater
 
+См. также [`V21_EXTERNAL_RESOURCES.md`](./V21_EXTERNAL_RESOURCES.md).
+
+## Pre-build resources
+
+```powershell
+npm run ffmpeg:fetch          # embed FFmpeg into NSIS
+npm run services:install      # gateway + webrtc deps
+npm run gateway:certs         # local TLS PEM
+npm run updater:keys          # Ed25519 for CDN updater
+```
+
 ## NSIS
 
 Сборка: `npm run tauri:build` → installer в `src-tauri/target/release/bundle/nsis/`.
 
-Конфиг: `src-tauri/tauri.conf.json` → `bundle.targets: "nsis"`.
+Конфиг: `src-tauri/tauri.conf.json` → `bundle.targets: "nsis"`, `bundle.resources`.
 
 Smoke: `npm run smoke:install`.
 

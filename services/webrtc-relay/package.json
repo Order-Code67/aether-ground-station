@@ -1,0 +1,12 @@
+{
+  "name": "aether-webrtc-relay",
+  "private": true,
+  "type": "module",
+  "version": "0.9.0",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
+}

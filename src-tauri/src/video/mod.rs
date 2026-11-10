@@ -47,6 +47,34 @@ fn which_tool(name: &str) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+fn bundled_tool(app: &AppHandle, exe: &str) -> Option<String> {
+    let resource = app.path().resource_dir().ok()?;
+    #[cfg(windows)]
+    let name = format!("{exe}.exe");
+    #[cfg(not(windows))]
+    let name = exe.to_string();
+    let candidates = [
+        resource.join("bin").join(&name),
+        resource.join(&name),
+        resource.join("resources").join("bin").join(&name),
+    ];
+    for p in candidates {
+        if p.is_file() {
+            return Some(p.to_string_lossy().into());
+        }
+    }
+    None
+}
+
+fn resolve_tool(app: Option<&AppHandle>, name: &str) -> Option<String> {
+    if let Some(app) = app {
+        if let Some(p) = bundled_tool(app, name) {
+            return Some(p);
+        }
+    }
+    which_tool(name)
+}
+
 fn ffmpeg_version(path: &str) -> Option<String> {
     let output = Command::new(path).arg("-version").output().ok()?;
     if !output.status.success() {
@@ -56,16 +84,20 @@ fn ffmpeg_version(path: &str) -> Option<String> {
     text.lines().next().map(|s| s.trim().to_string())
 }
 
-#[tauri::command]
-pub fn video_ffmpeg_status() -> FfmpegStatus {
-    let ffmpeg_path = which_tool("ffmpeg");
-    let ffprobe_path = which_tool("ffprobe");
+fn status_with_app(app: Option<&AppHandle>) -> FfmpegStatus {
+    let ffmpeg_path = resolve_tool(app, "ffmpeg");
+    let ffprobe_path = resolve_tool(app, "ffprobe");
     let version = ffmpeg_path.as_deref().and_then(ffmpeg_version);
     let available = ffmpeg_path.is_some();
-    let message = if available {
-        "FFmpeg найден — RTSP probe и JPEG bridge доступны".into()
+    let bundled = app
+        .and_then(|a| bundled_tool(a, "ffmpeg"))
+        .is_some();
+    let message = if available && bundled {
+        "FFmpeg bundled — RTSP probe и JPEG bridge доступны".into()
+    } else if available {
+        "FFmpeg из PATH — RTSP probe и JPEG bridge доступны".into()
     } else {
-        "FFmpeg не найден в PATH. Установите FFmpeg для RTSP/Video Capture Service.".into()
+        "FFmpeg не найден. Запустите scripts/fetch-ffmpeg.ps1 или установите в PATH.".into()
     };
     FfmpegStatus {
         available,
@@ -74,6 +106,11 @@ pub fn video_ffmpeg_status() -> FfmpegStatus {
         version,
         message,
     }
+}
+
+#[tauri::command]
+pub fn video_ffmpeg_status(app: AppHandle) -> FfmpegStatus {
+    status_with_app(Some(&app))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -88,6 +125,7 @@ pub struct RtspProbeResult {
 
 #[tauri::command]
 pub fn video_probe_rtsp(
+    app: AppHandle,
     auth: State<'_, AuthSessionState>,
     url: String,
 ) -> Result<RtspProbeResult, String> {
@@ -100,7 +138,7 @@ pub fn video_probe_rtsp(
         return Err("URL должен начинаться с rtsp:// или rtsps://".into());
     }
 
-    let status = video_ffmpeg_status();
+    let status = status_with_app(Some(&app));
     let Some(ffprobe) = status.ffprobe_path.or(status.ffmpeg_path) else {
         return Ok(RtspProbeResult {
             ok: false,
@@ -212,7 +250,7 @@ pub fn video_rtsp_bridge_start(
     if !(url.starts_with("rtsp://") || url.starts_with("rtsps://")) {
         return Err("URL должен начинаться с rtsp:// или rtsps://".into());
     }
-    let status = video_ffmpeg_status();
+    let status = status_with_app(Some(&app));
     let Some(ffmpeg) = status.ffmpeg_path else {
         return Err(status.message);
     };

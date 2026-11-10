@@ -57,6 +57,15 @@ const ProfilesView = lazy(() =>
 const RemoteView = lazy(() =>
   import("@/modules/remote").then((m) => ({ default: m.RemoteView })),
 );
+const RoboticsView = lazy(() =>
+  import("@/modules/robotics").then((m) => ({ default: m.RoboticsView })),
+);
+const AerialView = lazy(() =>
+  import("@/modules/aerial").then((m) => ({ default: m.AerialView })),
+);
+const HidView = lazy(() =>
+  import("@/modules/hid").then((m) => ({ default: m.HidView })),
+);
 const SettingsView = lazy(() =>
   import("@/modules/settings").then((m) => ({ default: m.SettingsView })),
 );
@@ -80,6 +89,9 @@ const VIEWS: Record<ModuleId, ComponentType> = {
   plugins: PluginsView,
   profiles: ProfilesView,
   remote: RemoteView,
+  robotics: RoboticsView,
+  aerial: AerialView,
+  hid: HidView,
   settings: SettingsView,
 };
 

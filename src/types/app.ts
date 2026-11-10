@@ -18,6 +18,9 @@ export type ModuleId =
   | "plugins"
   | "profiles"
   | "remote"
+  | "robotics"
+  | "aerial"
+  | "hid"
   | "settings";
 
 export interface ModuleDefinition {
@@ -135,6 +138,24 @@ export const MODULES: readonly ModuleDefinition[] = [
     label: "Удалённо",
     stage: 9,
     description: "Remote Infrastructure",
+  },
+  {
+    id: "robotics",
+    label: "Robotics",
+    stage: 11,
+    description: "Мониторинг робототехники",
+  },
+  {
+    id: "aerial",
+    label: "Aerial",
+    stage: 11,
+    description: "Наблюдение БВС (без пилота)",
+  },
+  {
+    id: "hid",
+    label: "HID",
+    stage: 11,
+    description: "Локальные контроллеры",
   },
   {
     id: "settings",

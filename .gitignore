@@ -9,6 +9,14 @@ release/
 *.exe
 *.msi
 *.dmg
+!src-tauri/resources/bin/README.md
+src-tauri/resources/bin/*
+!src-tauri/resources/bin/.gitkeep
+!src-tauri/resources/bin/README.md
+services/gateway-server/certs/
+services/gateway-server/node_modules/
+services/webrtc-relay/node_modules/
+package-lock.json.bak
 
 # Logs & OS
 *.log

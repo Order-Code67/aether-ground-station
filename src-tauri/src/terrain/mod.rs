@@ -38,6 +38,10 @@ struct TiffRaster {
     rows_per_strip: u32,
     strip_offsets: Vec<u64>,
     strip_byte_counts: Vec<u64>,
+    tile_width: Option<u32>,
+    tile_height: Option<u32>,
+    tile_offsets: Vec<u64>,
+    tile_byte_counts: Vec<u64>,
     // Geo: pixel scale + tiepoint origin (lon/lat typically)
     scale_x: Option<f64>,
     scale_y: Option<f64>,
@@ -214,6 +218,10 @@ fn parse_ifd(path: &str, little: bool) -> Result<Option<TiffRaster>, String> {
     let mut rows_per_strip = u32::MAX;
     let mut strip_offsets = Vec::new();
     let mut strip_byte_counts = Vec::new();
+    let mut tile_width = None;
+    let mut tile_height = None;
+    let mut tile_offsets = Vec::new();
+    let mut tile_byte_counts = Vec::new();
     let mut scale_x = None;
     let mut scale_y = None;
     let mut origin_x = None;
@@ -264,6 +272,28 @@ fn parse_ifd(path: &str, little: bool) -> Result<Option<TiffRaster>, String> {
                 let raw = read_tag_values(&mut f, little, typ, count, val)?;
                 strip_byte_counts = decode_u64_list(&raw, little, typ, count);
             }
+            322 => {
+                tile_width = Some(if typ == 3 {
+                    read_u16(&val[0..2], little) as u32
+                } else {
+                    read_u32(&val, little)
+                });
+            }
+            323 => {
+                tile_height = Some(if typ == 3 {
+                    read_u16(&val[0..2], little) as u32
+                } else {
+                    read_u32(&val, little)
+                });
+            }
+            324 => {
+                let raw = read_tag_values(&mut f, little, typ, count, val)?;
+                tile_offsets = decode_u64_list(&raw, little, typ, count);
+            }
+            325 => {
+                let raw = read_tag_values(&mut f, little, typ, count, val)?;
+                tile_byte_counts = decode_u64_list(&raw, little, typ, count);
+            }
             339 => sample_format = read_u16(&val[0..2], little),
             33550 => {
                 let raw = read_tag_values(&mut f, little, typ, count, val)?;
@@ -304,6 +334,10 @@ fn parse_ifd(path: &str, little: bool) -> Result<Option<TiffRaster>, String> {
         rows_per_strip,
         strip_offsets,
         strip_byte_counts,
+        tile_width,
+        tile_height,
+        tile_offsets,
+        tile_byte_counts,
         scale_x,
         scale_y,
         origin_x,
@@ -372,34 +406,8 @@ pub struct ElevationSample {
     pub message: String,
 }
 
-fn sample_pixel(raster: &TiffRaster, path: &str, col: u32, row: u32) -> Result<Option<f64>, String> {
-    if col >= raster.width || row >= raster.height {
-        return Ok(None);
-    }
-    if raster.compression != 1 {
-        return Err(format!(
-            "Сжатие TIFF {} не поддерживается (нужен uncompressed=1)",
-            raster.compression
-        ));
-    }
-    let bytes_pp = (raster.bits_per_sample / 8).max(1) as u64;
-    let strip_index = (row / raster.rows_per_strip) as usize;
-    if strip_index >= raster.strip_offsets.len() {
-        return Ok(None);
-    }
-    let row_in_strip = row % raster.rows_per_strip;
-    let offset = raster.strip_offsets[strip_index]
-        + (row_in_strip as u64) * (raster.width as u64) * bytes_pp
-        + (col as u64) * bytes_pp;
-
-    let mut f = File::open(path).map_err(|e| e.to_string())?;
-    f.seek(SeekFrom::Start(offset)).map_err(|e| e.to_string())?;
-    let mut buf = vec![0u8; bytes_pp as usize];
-    if f.read_exact(&mut buf).is_err() {
-        return Ok(None);
-    }
-
-    let v = match (raster.bits_per_sample, raster.sample_format) {
+fn decode_sample(raster: &TiffRaster, buf: &[u8]) -> Result<Option<f64>, String> {
+    match (raster.bits_per_sample, raster.sample_format) {
         (32, 3) => {
             let b: [u8; 4] = buf[..4].try_into().unwrap();
             let f32v = if raster.little {
@@ -408,9 +416,9 @@ fn sample_pixel(raster: &TiffRaster, path: &str, col: u32, row: u32) -> Result<O
                 f32::from_be_bytes(b)
             };
             if !f32v.is_finite() || f32v < -1000.0 || f32v > 9000.0 {
-                return Ok(None); // nodata-ish
+                return Ok(None);
             }
-            f32v as f64
+            Ok(Some(f32v as f64))
         }
         (16, 2) => {
             let b: [u8; 2] = buf[..2].try_into().unwrap();
@@ -422,7 +430,7 @@ fn sample_pixel(raster: &TiffRaster, path: &str, col: u32, row: u32) -> Result<O
             if i == i16::MIN || i <= -9999 {
                 return Ok(None);
             }
-            i as f64
+            Ok(Some(i as f64))
         }
         (16, 1) => {
             let b: [u8; 2] = buf[..2].try_into().unwrap();
@@ -434,7 +442,7 @@ fn sample_pixel(raster: &TiffRaster, path: &str, col: u32, row: u32) -> Result<O
             if u == 0 || u == u16::MAX {
                 return Ok(None);
             }
-            u as f64
+            Ok(Some(u as f64))
         }
         (32, 1) | (32, 2) => {
             let b: [u8; 4] = buf[..4].try_into().unwrap();
@@ -446,16 +454,117 @@ fn sample_pixel(raster: &TiffRaster, path: &str, col: u32, row: u32) -> Result<O
             if i <= -9999 {
                 return Ok(None);
             }
-            i as f64
+            Ok(Some(i as f64))
         }
-        _ => {
-            return Err(format!(
-                "Формат sample bits={} format={} не поддерживается",
-                raster.bits_per_sample, raster.sample_format
-            ));
+        _ => Err(format!(
+            "Формат sample bits={} format={} не поддерживается",
+            raster.bits_per_sample, raster.sample_format
+        )),
+    }
+}
+
+fn inflate_if_needed(compression: u16, raw: &[u8]) -> Result<Vec<u8>, String> {
+    match compression {
+        1 => Ok(raw.to_vec()),
+        8 | 32946 => {
+            use flate2::read::{DeflateDecoder, ZlibDecoder};
+            use std::io::Read as _;
+            // Try zlib wrapper first, then raw deflate (Adobe).
+            let mut out = Vec::new();
+            if ZlibDecoder::new(raw).read_to_end(&mut out).is_ok() && !out.is_empty() {
+                return Ok(out);
+            }
+            out.clear();
+            DeflateDecoder::new(raw)
+                .read_to_end(&mut out)
+                .map_err(|e| format!("Deflate decode: {e}"))?;
+            Ok(out)
         }
-    };
-    Ok(Some(v))
+        other => Err(format!(
+            "Сжатие TIFF {other} не поддерживается (1=none, 8=deflate). Высота N/A."
+        )),
+    }
+}
+
+fn sample_pixel(raster: &TiffRaster, path: &str, col: u32, row: u32) -> Result<Option<f64>, String> {
+    if col >= raster.width || row >= raster.height {
+        return Ok(None);
+    }
+    let bytes_pp = (raster.bits_per_sample / 8).max(1) as usize;
+
+    // Tiled path
+    if let (Some(tw), Some(th)) = (raster.tile_width, raster.tile_height) {
+        if tw == 0 || th == 0 || raster.tile_offsets.is_empty() {
+            return Ok(None);
+        }
+        let tiles_across = (raster.width + tw - 1) / tw;
+        let tile_col = col / tw;
+        let tile_row = row / th;
+        let tile_index = (tile_row * tiles_across + tile_col) as usize;
+        if tile_index >= raster.tile_offsets.len() {
+            return Ok(None);
+        }
+        let off = raster.tile_offsets[tile_index];
+        let nbytes = raster
+            .tile_byte_counts
+            .get(tile_index)
+            .copied()
+            .unwrap_or(0) as usize;
+        if nbytes == 0 {
+            return Ok(None);
+        }
+        let mut f = File::open(path).map_err(|e| e.to_string())?;
+        f.seek(SeekFrom::Start(off)).map_err(|e| e.to_string())?;
+        let mut raw = vec![0u8; nbytes];
+        f.read_exact(&mut raw).map_err(|e| e.to_string())?;
+        let data = inflate_if_needed(raster.compression, &raw)?;
+        let x = (col % tw) as usize;
+        let y = (row % th) as usize;
+        let idx = (y * tw as usize + x) * bytes_pp;
+        if idx + bytes_pp > data.len() {
+            return Ok(None);
+        }
+        return decode_sample(raster, &data[idx..idx + bytes_pp]);
+    }
+
+    // Strip path
+    let strip_index = (row / raster.rows_per_strip) as usize;
+    if strip_index >= raster.strip_offsets.len() {
+        return Ok(None);
+    }
+    let row_in_strip = row % raster.rows_per_strip;
+    let mut f = File::open(path).map_err(|e| e.to_string())?;
+
+    if raster.compression == 1 {
+        let offset = raster.strip_offsets[strip_index]
+            + (row_in_strip as u64) * (raster.width as u64) * bytes_pp as u64
+            + (col as u64) * bytes_pp as u64;
+        f.seek(SeekFrom::Start(offset)).map_err(|e| e.to_string())?;
+        let mut buf = vec![0u8; bytes_pp];
+        if f.read_exact(&mut buf).is_err() {
+            return Ok(None);
+        }
+        return decode_sample(raster, &buf);
+    }
+
+    let nbytes = raster
+        .strip_byte_counts
+        .get(strip_index)
+        .copied()
+        .unwrap_or(0) as usize;
+    if nbytes == 0 {
+        return Ok(None);
+    }
+    f.seek(SeekFrom::Start(raster.strip_offsets[strip_index]))
+        .map_err(|e| e.to_string())?;
+    let mut raw = vec![0u8; nbytes];
+    f.read_exact(&mut raw).map_err(|e| e.to_string())?;
+    let data = inflate_if_needed(raster.compression, &raw)?;
+    let idx = (row_in_strip as usize * raster.width as usize + col as usize) * bytes_pp;
+    if idx + bytes_pp > data.len() {
+        return Ok(None);
+    }
+    decode_sample(raster, &data[idx..idx + bytes_pp])
 }
 
 pub fn sample_elevation(path: &str, latitude: f64, longitude: f64) -> Result<ElevationSample, String> {

@@ -1,7 +1,7 @@
 {
   "name": "aether-ground-station",
   "private": true,
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Aether Ground Station — modular desktop platform for ground hardware complexes",
   "type": "module",
   "scripts": {
@@ -13,8 +13,14 @@
     "test:watch": "vitest",
     "test:critical": "node scripts/critical-path.test.mjs",
     "test:e2e": "playwright test",
+    "test:e2e:tauri": "playwright test -c playwright.tauri.config.ts",
     "smoke:install": "powershell -ExecutionPolicy Bypass -File scripts/smoke-post-install.ps1",
-    "gateway:stub": "node services/gateway-server/server.mjs",
+    "ffmpeg:fetch": "powershell -ExecutionPolicy Bypass -File scripts/fetch-ffmpeg.ps1",
+    "gateway:stub": "npm --prefix services/gateway-server start",
+    "gateway:certs": "node scripts/gen-gateway-certs.mjs",
+    "webrtc:relay": "npm --prefix services/webrtc-relay start",
+    "services:install": "npm --prefix services/gateway-server install --no-fund --no-audit && npm --prefix services/webrtc-relay install --no-fund --no-audit",
+    "updater:keys": "powershell -ExecutionPolicy Bypass -File scripts/gen-updater-keys.ps1",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
@@ -31,15 +37,16 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^6.0.2",
+    "selfsigned": "^5.5.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
     "vite": "^8.0.16",
-    "@playwright/test": "^1.56.1",
     "vitest": "^3.2.4"
   }
 }

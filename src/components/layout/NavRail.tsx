@@ -1,14 +1,17 @@
 import {
   Archive,
   Boxes,
+  Bot,
   Cable,
   Cloud,
   Compass,
   FileText,
+  Gamepad2,
   Gauge,
   LayoutGrid,
   Map,
   Mountain,
+  Plane,
   Puzzle,
   Radio,
   Settings,
@@ -43,6 +46,9 @@ const ICONS: Record<ModuleId, LucideIcon> = {
   plugins: Puzzle,
   profiles: TowerControl,
   remote: Cloud,
+  robotics: Bot,
+  aerial: Plane,
+  hid: Gamepad2,
   settings: Settings,
 };
 

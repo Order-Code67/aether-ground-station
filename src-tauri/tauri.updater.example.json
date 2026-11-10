@@ -1,0 +1,13 @@
+{
+  "plugins": {
+    "updater": {
+      "pubkey": "<paste from scripts/gen-updater-keys.ps1>",
+      "endpoints": [
+        "https://cdn.example.com/aether/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}
