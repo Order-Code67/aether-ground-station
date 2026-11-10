@@ -17,6 +17,22 @@ export interface RtspProbeResult {
   streams: string[];
 }
 
+export interface RtspBridgeStatus {
+  running: boolean;
+  url?: string | null;
+  framePath?: string | null;
+  uptimeMs?: number | null;
+  message: string;
+}
+
+export interface RtspBridgeFrame {
+  ok: boolean;
+  mime: string;
+  base64?: string | null;
+  sizeBytes?: number | null;
+  error?: string | null;
+}
+
 export async function getFfmpegStatus(): Promise<FfmpegStatus> {
   if (!isTauriRuntime()) {
     return {
@@ -32,4 +48,28 @@ export async function probeRtsp(url: string): Promise<RtspProbeResult> {
     throw new Error("RTSP probe только в Tauri");
   }
   return invoke<RtspProbeResult>("video_probe_rtsp", { url });
+}
+
+export async function startRtspBridge(url: string): Promise<RtspBridgeStatus> {
+  if (!isTauriRuntime()) throw new Error("RTSP bridge только в Tauri");
+  return invoke<RtspBridgeStatus>("video_rtsp_bridge_start", { url });
+}
+
+export async function stopRtspBridge(): Promise<RtspBridgeStatus> {
+  if (!isTauriRuntime()) throw new Error("RTSP bridge только в Tauri");
+  return invoke<RtspBridgeStatus>("video_rtsp_bridge_stop");
+}
+
+export async function getRtspBridgeStatus(): Promise<RtspBridgeStatus> {
+  if (!isTauriRuntime()) {
+    return { running: false, message: "preview" };
+  }
+  return invoke<RtspBridgeStatus>("video_rtsp_bridge_status");
+}
+
+export async function getRtspBridgeFrame(): Promise<RtspBridgeFrame> {
+  if (!isTauriRuntime()) {
+    return { ok: false, mime: "image/jpeg", error: "preview" };
+  }
+  return invoke<RtspBridgeFrame>("video_rtsp_bridge_frame");
 }

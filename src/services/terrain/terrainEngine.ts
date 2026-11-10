@@ -128,3 +128,40 @@ export function createManualElevationAdapter(
     },
   };
 }
+
+/** GeoTIFF DEM via Rust sampler (uncompressed Float32/Int16 + geo tags). */
+export function createGeoTiffAdapter(path: string): TerrainAdapter {
+  return {
+    id: "geotiff",
+    label: `GeoTIFF ${path}`,
+    async sample(lat, lng) {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const { isTauriRuntime } = await import("@/services/tauri");
+      if (!isTauriRuntime()) {
+        return {
+          latitude: lat,
+          longitude: lng,
+          elevationM: null,
+          sourceId: null,
+          missing: true,
+        };
+      }
+      const s = await invoke<{
+        elevationM?: number | null;
+        missing: boolean;
+        message: string;
+      }>("terrain_sample_elevation", {
+        path,
+        latitude: lat,
+        longitude: lng,
+      });
+      return {
+        latitude: lat,
+        longitude: lng,
+        elevationM: s.elevationM ?? null,
+        sourceId: "geotiff",
+        missing: s.missing || s.elevationM == null,
+      };
+    },
+  };
+}

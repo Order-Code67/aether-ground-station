@@ -5,6 +5,7 @@ import {
   getTerrainAdapter,
   setTerrainAdapter,
   createManualElevationAdapter,
+  createGeoTiffAdapter,
   type TerrainProfilePoint,
 } from "@/services/terrain/terrainEngine";
 import { emitDomain } from "@/services/events/domainEvents";
@@ -41,6 +42,12 @@ export function TerrainPanel() {
           sourceType: "geotiff",
           path: info.path,
           resolutionM: null,
+        });
+        setTerrainAdapter(createGeoTiffAdapter(info.path), {
+          id: "geotiff",
+          name: info.path,
+          sourceType: "geotiff",
+          path: info.path,
         });
         setMeta({
           id: "geotiff",

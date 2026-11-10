@@ -5,18 +5,26 @@ import {
 } from "@/services/video";
 import {
   getVideoAdapter,
+  isRtspBridgeHandle,
+  type RtspBridgeHandle,
   type VideoAdapterKind,
 } from "@/services/video/adapters";
+import {
+  getFfmpegStatus,
+  getRtspBridgeFrame,
+  stopRtspBridge,
+} from "@/services/video/ffmpeg";
 import { saveRecordingToDisk } from "@/services/video/recording";
 import type { CaptureDeviceInfo, VideoSignalState } from "@/types";
 import { eventBus } from "@/services/events/eventBus";
 import { useArchiveStore } from "@/stores/archiveStore";
 import { deviceManager } from "@/services/devices/deviceManager";
-import { getFfmpegStatus } from "@/services/video/ffmpeg";
 
 export function VideoPanel() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const bridgeRef = useRef<RtspBridgeHandle | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startedAtRef = useRef<string>("");
@@ -32,6 +40,7 @@ export function VideoPanel() {
   const [size, setSize] = useState<{ w?: number; h?: number }>({});
   const [recording, setRecording] = useState(false);
   const [ffmpegMsg, setFfmpegMsg] = useState<string | null>(null);
+  const [bridgeMode, setBridgeMode] = useState(false);
   const addClip = useArchiveStore((s) => s.addClip);
 
   useEffect(() => {
@@ -39,6 +48,17 @@ export function VideoPanel() {
       .then((s) => setFfmpegMsg(s.message))
       .catch(() => setFfmpegMsg(null));
   }, []);
+
+  const cleanupMedia = async () => {
+    recorderRef.current?.stop();
+    stopStream(streamRef.current);
+    streamRef.current = null;
+    if (bridgeRef.current) {
+      await bridgeRef.current.stop().catch(() => stopRtspBridge());
+      bridgeRef.current = null;
+    }
+    setBridgeMode(false);
+  };
 
   const refreshDevices = async () => {
     try {
@@ -66,8 +86,7 @@ export function VideoPanel() {
   };
 
   const connect = async () => {
-    stopStream(streamRef.current);
-    streamRef.current = null;
+    await cleanupMedia();
     setError(null);
     setSignal("unknown");
     const adapter = getVideoAdapter(adapterKind);
@@ -75,10 +94,27 @@ export function VideoPanel() {
       adapterKind === "mediadevices" ? selected : sourceUrl.trim();
     const cardId = `video:${adapterKind}:${sourceId || "default"}`;
     try {
-      const stream = await adapter.open(sourceId);
-      streamRef.current = stream;
+      const opened = await adapter.open(sourceId);
+      if (isRtspBridgeHandle(opened)) {
+        bridgeRef.current = opened;
+        setBridgeMode(true);
+        setSignal("ok");
+        deviceManager.upsert({
+          id: cardId,
+          name: adapter.label,
+          connectionType: "capture",
+          address: sourceId || undefined,
+          status: "Online",
+          lastSeenAt: new Date().toISOString(),
+          capabilities: ["video", "rtsp-bridge"],
+        });
+        eventBus.emit("info", "video", `Видео: ${adapter.label}`);
+        return;
+      }
+      streamRef.current = opened;
+      setBridgeMode(false);
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+        videoRef.current.srcObject = opened;
         await videoRef.current.play();
       }
       setSignal("ok");
@@ -93,6 +129,7 @@ export function VideoPanel() {
       });
       deviceManager.registerReconnectHandler(cardId, async () => {
         const s = await adapter.open(sourceId);
+        if (isRtspBridgeHandle(s)) return;
         stopStream(streamRef.current);
         streamRef.current = s;
         if (videoRef.current) {
@@ -125,13 +162,14 @@ export function VideoPanel() {
   useEffect(() => {
     void refreshDevices();
     return () => {
-      recorderRef.current?.stop();
-      stopStream(streamRef.current);
+      void cleanupMedia();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adapterKind]);
 
+  // MediaDevices FPS
   useEffect(() => {
+    if (bridgeMode) return;
     let frames = 0;
     let last = performance.now();
     let raf = 0;
@@ -154,11 +192,57 @@ export function VideoPanel() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [signal]);
+  }, [signal, bridgeMode]);
+
+  // RTSP JPEG bridge poll
+  useEffect(() => {
+    if (!bridgeMode || signal !== "ok") return;
+    let alive = true;
+    let frames = 0;
+    let last = performance.now();
+    const poll = async () => {
+      while (alive) {
+        try {
+          const frame = await getRtspBridgeFrame();
+          if (!alive) break;
+          if (frame.ok && frame.base64 && imgRef.current) {
+            imgRef.current.src = `data:${frame.mime};base64,${frame.base64}`;
+            frames += 1;
+            const now = performance.now();
+            if (now - last >= 1000) {
+              setFps(frames);
+              frames = 0;
+              last = now;
+            }
+            if (imgRef.current.naturalWidth) {
+              setSize({
+                w: imgRef.current.naturalWidth,
+                h: imgRef.current.naturalHeight,
+              });
+            }
+          }
+        } catch {
+          /* ignore transient */
+        }
+        await new Promise((r) => setTimeout(r, 120));
+      }
+    };
+    void poll();
+    return () => {
+      alive = false;
+    };
+  }, [bridgeMode, signal]);
 
   const toggleRecord = () => {
     const stream = streamRef.current;
-    if (!stream) return;
+    if (!stream) {
+      eventBus.emit(
+        "warning",
+        "video",
+        "Запись MediaRecorder доступна для UVC/HDMI; RTSP bridge — кадры JPEG.",
+      );
+      return;
+    }
     if (recording) {
       recorderRef.current?.stop();
       setRecording(false);
@@ -251,7 +335,7 @@ export function VideoPanel() {
         </button>
         <button
           type="button"
-          disabled={signal !== "ok"}
+          disabled={signal !== "ok" || bridgeMode}
           onClick={toggleRecord}
           className="rounded border border-ags-border px-2 py-1 disabled:opacity-40"
         >
@@ -259,7 +343,11 @@ export function VideoPanel() {
         </button>
         <button
           type="button"
-          onClick={() => void videoRef.current?.requestFullscreen?.()}
+          onClick={() =>
+            void (bridgeMode
+              ? imgRef.current?.requestFullscreen?.()
+              : videoRef.current?.requestFullscreen?.())
+          }
           className="rounded border border-ags-border px-2 py-1"
         >
           Полный экран
@@ -267,12 +355,20 @@ export function VideoPanel() {
       </div>
 
       <div className="relative min-h-0 flex-1 overflow-hidden rounded border border-ags-border bg-black">
-        <video
-          ref={videoRef}
-          className="h-full w-full object-contain"
-          muted
-          playsInline
-        />
+        {bridgeMode ? (
+          <img
+            ref={imgRef}
+            alt="RTSP frame"
+            className="h-full w-full object-contain"
+          />
+        ) : (
+          <video
+            ref={videoRef}
+            className="h-full w-full object-contain"
+            muted
+            playsInline
+          />
+        )}
         {signal !== "ok" && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-4 text-center text-sm text-ags-muted">
             {error ??

@@ -64,6 +64,17 @@ export async function fetchComplexReportJson(): Promise<string> {
   return invoke("report_complex_summary");
 }
 
+export async function exportComplexReportPdf(): Promise<{
+  path: string;
+  bytes: number;
+  message: string;
+}> {
+  if (!isTauriRuntime()) {
+    throw new Error("PDF только в desktop");
+  }
+  return invoke("report_complex_pdf");
+}
+
 export async function appendTelemetryRecord(payload: {
   id: string;
   deviceId?: string;

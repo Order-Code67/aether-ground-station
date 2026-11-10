@@ -1,7 +1,12 @@
 import type { CaptureDeviceInfo } from "@/types";
 import { eventBus } from "@/services/events/eventBus";
 import { listCaptureDevices, openCaptureStream } from "./captureService";
-import { getFfmpegStatus, probeRtsp } from "./ffmpeg";
+import {
+  getFfmpegStatus,
+  probeRtsp,
+  startRtspBridge,
+  stopRtspBridge,
+} from "./ffmpeg";
 
 export type VideoAdapterKind = "mediadevices" | "rtsp" | "webrtc";
 
@@ -9,7 +14,25 @@ export interface VideoAdapter {
   kind: VideoAdapterKind;
   label: string;
   listSources(): Promise<CaptureDeviceInfo[]>;
-  open(sourceId: string): Promise<MediaStream>;
+  open(sourceId: string): Promise<MediaStream | RtspBridgeHandle>;
+}
+
+/** Opaque handle for JPEG bridge (not a MediaStream). */
+export interface RtspBridgeHandle {
+  kind: "rtsp-bridge";
+  url: string;
+  stop: () => Promise<void>;
+}
+
+export function isRtspBridgeHandle(
+  v: MediaStream | RtspBridgeHandle,
+): v is RtspBridgeHandle {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    "kind" in v &&
+    (v as RtspBridgeHandle).kind === "rtsp-bridge"
+  );
 }
 
 export const mediaDevicesAdapter: VideoAdapter = {
@@ -20,12 +43,11 @@ export const mediaDevicesAdapter: VideoAdapter = {
 };
 
 /**
- * RTSP: probe via FFmpeg/ffprobe (Video Capture Service).
- * Decode→MediaStream in WebView still requires native frame bridge — probe validates source.
+ * RTSP via FFmpeg JPEG bridge (real decode). Requires FFmpeg in PATH + reachable URL.
  */
 export const rtspAdapter: VideoAdapter = {
   kind: "rtsp",
-  label: "RTSP (FFmpeg probe)",
+  label: "RTSP (FFmpeg bridge)",
   async listSources() {
     return [];
   },
@@ -42,14 +64,19 @@ export const rtspAdapter: VideoAdapter = {
       eventBus.emit("error", "video-rtsp", msg);
       throw new Error(msg);
     }
+    await startRtspBridge(url.trim());
     eventBus.emit(
       "info",
       "video-rtsp",
-      `RTSP OK (${probe.latencyMs ?? "?"} мс). Декод в WebView — следующий этап Video Capture Service.`,
+      `RTSP bridge OK (${probe.latencyMs ?? "?"} мс probe)`,
     );
-    throw new Error(
-      "RTSP источник доступен (probe OK), но кадры в UI ещё требуют native decode bridge. Используйте UVC/HDMI для просмотра.",
-    );
+    return {
+      kind: "rtsp-bridge" as const,
+      url: url.trim(),
+      stop: async () => {
+        await stopRtspBridge();
+      },
+    };
   },
 };
 

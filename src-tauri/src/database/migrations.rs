@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection};
 
-/// Versioned migrations. Current schema version = 2 (V2 Core).
-pub const SCHEMA_VERSION: i64 = 2;
+/// Versioned migrations. Current schema version = 3 (Gateway outbox).
+pub const SCHEMA_VERSION: i64 = 3;
 
 pub fn apply_migrations(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
@@ -27,6 +27,10 @@ pub fn apply_migrations(conn: &Connection) -> Result<(), String> {
     if current < 2 {
         migrate_v2(conn)?;
         stamp(conn, 2)?;
+    }
+    if current < 3 {
+        migrate_v3(conn)?;
+        stamp(conn, 3)?;
     }
 
     // Ensure foreign keys on for this connection
@@ -268,6 +272,23 @@ fn migrate_v2(conn: &Connection) -> Result<(), String> {
         CREATE INDEX IF NOT EXISTS idx_telemetry_at ON telemetry_records(at DESC);
         CREATE INDEX IF NOT EXISTS idx_diag_at ON diagnostic_reports(at DESC);
         CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(timestamp DESC);
+        "#,
+    )
+    .map_err(|e| e.to_string())
+}
+
+fn migrate_v3(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS sync_outbox (
+          id TEXT PRIMARY KEY,
+          kind TEXT NOT NULL,
+          payload TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_outbox_status ON sync_outbox(status, created_at);
         "#,
     )
     .map_err(|e| e.to_string())

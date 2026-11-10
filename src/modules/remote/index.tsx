@@ -1,10 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   getRemoteGateway,
   getRemoteTestMode,
   setRemoteTestMode,
 } from "@/services/remote";
 import type { RemoteStationSummary, RemoteTestMode } from "@/types/remote";
+import {
+  getGatewayConfig,
+  getGatewayStatus,
+  setGatewayConfig,
+  tryGatewaySync,
+  enqueueGateway,
+  type GatewayConfig,
+  type GatewayStatus,
+} from "@/services/gateway";
 import { eventBus } from "@/services/events/eventBus";
 import { StatusBadge } from "@/components/common/StatusBadge";
 
@@ -13,6 +22,18 @@ export function RemoteView() {
   const [stations, setStations] = useState<RemoteStationSummary[] | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [synthetic, setSynthetic] = useState(false);
+  const [cfg, setCfg] = useState<GatewayConfig>({
+    enabled: false,
+    httpBaseUrl: "",
+    postgresDsn: "",
+    staleAfterSec: 120,
+  });
+  const [status, setStatus] = useState<GatewayStatus | null>(null);
+
+  useEffect(() => {
+    void getGatewayConfig().then(setCfg);
+    void getGatewayStatus().then(setStatus);
+  }, []);
 
   const applyMode = (next: RemoteTestMode) => {
     setRemoteTestMode(next);
@@ -41,22 +62,102 @@ export function RemoteView() {
     );
   };
 
+  const saveGw = async () => {
+    const next = await setGatewayConfig(cfg);
+    setCfg(next);
+    setStatus(await getGatewayStatus());
+    eventBus.emit("info", "gateway", "Конфиг Central Gateway сохранён");
+  };
+
+  const syncNow = async () => {
+    try {
+      await enqueueGateway("heartbeat", { at: Date.now() });
+      const st = await tryGatewaySync();
+      setStatus(st);
+      eventBus.emit("info", "gateway", st.message);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setNote(msg);
+      eventBus.emit("warning", "gateway", msg);
+      setStatus(await getGatewayStatus());
+    }
+  };
+
   return (
     <div className="flex h-full flex-col gap-6 overflow-auto p-8">
       <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-ags-dim">Этап v0.3</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-ags-dim">V2 Gateway</p>
         <h1 className="mt-2 text-2xl font-semibold">Удалённое подключение</h1>
         <p className="mt-2 max-w-2xl text-sm text-ags-muted">
-          Архитектура Remote Connectivity: Client, Gateway, Registry, Auth, Sessions,
-          Telemetry, Video Relay, Audit. Реализация сервера — отдельный этап.
-          Критические функции безопасности остаются локальными; команды полёта и
-          целеуказания через remote не передаются.
+          Central Gateway: outbox → HTTP sync, PostgreSQL probe. Локальный SQLite —
+          SSOT offline. Команды полёта / актуаторов через remote не передаются.
         </p>
       </div>
 
       <section className="max-w-xl space-y-3 rounded-lg border border-ags-border bg-ags-panel p-4 text-sm">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-ags-muted">
-          Тестовый режим
+          Central Gateway
+        </h2>
+        <label className="flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            checked={cfg.enabled}
+            onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })}
+          />
+          Включён
+        </label>
+        <input
+          className="w-full rounded border border-ags-border bg-ags-elevated px-2 py-1 font-mono text-xs"
+          placeholder="https://gateway.example:8443"
+          value={cfg.httpBaseUrl}
+          onChange={(e) => setCfg({ ...cfg, httpBaseUrl: e.target.value })}
+        />
+        <input
+          className="w-full rounded border border-ags-border bg-ags-elevated px-2 py-1 font-mono text-xs"
+          placeholder="postgresql://user@host:5432/aether"
+          value={cfg.postgresDsn}
+          onChange={(e) => setCfg({ ...cfg, postgresDsn: e.target.value })}
+        />
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rounded bg-ags-accent px-3 py-1.5 text-white"
+            onClick={() => void saveGw()}
+          >
+            Сохранить
+          </button>
+          <button
+            type="button"
+            className="rounded border border-ags-border px-3 py-1.5"
+            onClick={() => void syncNow()}
+          >
+            Sync outbox
+          </button>
+          <button
+            type="button"
+            className="rounded border border-ags-border px-3 py-1.5"
+            onClick={() => void getGatewayStatus().then(setStatus)}
+          >
+            Статус
+          </button>
+        </div>
+        {status && (
+          <div className="space-y-1 text-xs text-ags-muted">
+            <p>{status.message}</p>
+            <p>
+              outbox: {status.pendingOutbox}
+              {status.stale ? " · STALE" : ""}
+              {status.httpReachable === false ? " · HTTP down" : ""}
+              {status.postgresReachable === false ? " · PG down" : ""}
+            </p>
+            {status.stale && <StatusBadge label="stale data" tone="warn" />}
+          </div>
+        )}
+      </section>
+
+      <section className="max-w-xl space-y-3 rounded-lg border border-ags-border bg-ags-panel p-4 text-sm">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-ags-muted">
+          Тестовый режим API
         </h2>
         <div className="flex flex-wrap gap-2">
           {(["disabled", "sandbox", "integration"] as const).map((m) => (
@@ -74,10 +175,6 @@ export function RemoteView() {
             </button>
           ))}
         </div>
-        <p className="text-xs text-ags-dim">
-          Sandbox не выдаёт демонстрационные станции/телеметрию за реальные
-          (флаг synthetic=true).
-        </p>
         <button
           type="button"
           className="rounded border border-ags-border px-3 py-1.5"
@@ -105,25 +202,6 @@ export function RemoteView() {
             )}
           </div>
         )}
-      </section>
-
-      <section className="max-w-2xl rounded-lg border border-ags-border bg-ags-panel p-4 text-sm text-ags-muted">
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider">
-          Контракты API
-        </h2>
-        <ul className="list-disc space-y-1 pl-5 text-xs">
-          <li>
-            <code className="text-ags-accent">src/types/remote.ts</code> — типы
-          </li>
-          <li>
-            <code className="text-ags-accent">src/services/remote/</code> — интерфейсы
-            сервисов + sandbox gateway
-          </li>
-          <li>
-            Документация:{" "}
-            <code className="text-ags-accent">docs/REMOTE_CONNECTIVITY.md</code>
-          </li>
-        </ul>
       </section>
     </div>
   );

@@ -25,10 +25,21 @@ commands.allow = [
   "maintenance_upsert",
   "telemetry_append",
   "report_complex_summary",
+  "report_complex_pdf",
   "auth_bind_session",
   "auth_clear_session",
   "video_ffmpeg_status",
   "video_probe_rtsp",
+  "video_rtsp_bridge_start",
+  "video_rtsp_bridge_stop",
+  "video_rtsp_bridge_status",
+  "video_rtsp_bridge_frame",
   "terrain_inspect_geotiff",
-  "terrain_register_source"
+  "terrain_sample_elevation",
+  "terrain_register_source",
+  "gateway_get_config",
+  "gateway_set_config",
+  "gateway_status",
+  "gateway_enqueue",
+  "gateway_try_sync"
 ]

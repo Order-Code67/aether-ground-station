@@ -1,8 +1,10 @@
 mod auth_session;
 mod commands;
 mod database;
+mod gateway;
 mod hardware;
 mod network;
+mod reports;
 mod terrain;
 mod video;
 
@@ -10,6 +12,7 @@ use auth_session::AuthSessionState;
 use database::sqlite::DbState;
 use hardware::serial::SerialState;
 use tauri::Manager;
+use video::RtspBridgeState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -20,6 +23,7 @@ pub fn run() {
         .manage(SerialState::default())
         .manage(DbState::default())
         .manage(AuthSessionState::default())
+        .manage(RtspBridgeState::default())
         .setup(|app| {
             let state = app.state::<DbState>();
             let _ = database::sqlite::open_and_migrate(&state);
@@ -40,8 +44,19 @@ pub fn run() {
             hardware::ethernet::probe_host,
             video::video_ffmpeg_status,
             video::video_probe_rtsp,
+            video::video_rtsp_bridge_start,
+            video::video_rtsp_bridge_stop,
+            video::video_rtsp_bridge_status,
+            video::video_rtsp_bridge_frame,
             terrain::terrain_inspect_geotiff,
+            terrain::terrain_sample_elevation,
             terrain::terrain_register_source,
+            gateway::gateway_get_config,
+            gateway::gateway_set_config,
+            gateway::gateway_status,
+            gateway::gateway_enqueue,
+            gateway::gateway_try_sync,
+            reports::report_complex_pdf,
             database::sqlite::db_init,
             database::sqlite::db_schema_version,
             database::sqlite::db_append_event,

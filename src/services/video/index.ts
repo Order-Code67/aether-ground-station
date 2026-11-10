@@ -11,8 +11,13 @@ export {
   mediaDevicesAdapter,
   rtspAdapter,
   webrtcAdapter,
+  isRtspBridgeHandle,
 } from "./adapters";
-export type { VideoAdapter, VideoAdapterKind } from "./adapters";
+export type {
+  VideoAdapter,
+  VideoAdapterKind,
+  RtspBridgeHandle,
+} from "./adapters";
 export { saveRecordingToDisk } from "./recording";
 
 export function isVideoCaptureAvailable(): boolean {
