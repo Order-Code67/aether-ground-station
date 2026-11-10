@@ -27,11 +27,17 @@ export function RemoteView() {
     httpBaseUrl: "",
     postgresDsn: "",
     staleAfterSec: 120,
+    syncSecret: "",
   });
   const [status, setStatus] = useState<GatewayStatus | null>(null);
 
   useEffect(() => {
-    void getGatewayConfig().then(setCfg);
+    void getGatewayConfig().then((c) =>
+      setCfg({
+        ...c,
+        syncSecret: c.syncSecret ?? "",
+      }),
+    );
     void getGatewayStatus().then(setStatus);
   }, []);
 
@@ -118,6 +124,16 @@ export function RemoteView() {
           value={cfg.postgresDsn}
           onChange={(e) => setCfg({ ...cfg, postgresDsn: e.target.value })}
         />
+        <input
+          className="w-full rounded border border-ags-border bg-ags-elevated px-2 py-1 font-mono text-xs"
+          placeholder="syncSecret (= GATEWAY_SYNC_SECRET)"
+          type="password"
+          value={cfg.syncSecret}
+          onChange={(e) => setCfg({ ...cfg, syncSecret: e.target.value })}
+        />
+        <p className="text-[11px] text-ags-dim">
+          Preview: sync требует X-Ags-Sync-Token. Сервер: GATEWAY_SYNC_SECRET.
+        </p>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"

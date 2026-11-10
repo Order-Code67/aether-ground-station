@@ -31,6 +31,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::app::get_app_info,
+            auth_session::auth_login,
             auth_session::auth_bind_session,
             auth_session::auth_clear_session,
             hardware::serial::serial_list_ports,
@@ -64,6 +65,7 @@ pub fn run() {
             database::sqlite::db_upsert_setting,
             database::sqlite::db_get_setting,
             database::sqlite::db_backup,
+            database::sqlite::db_restore,
             database::sqlite::db_upsert_json,
             database::sqlite::db_get_json,
             database::sqlite::db_list_users,

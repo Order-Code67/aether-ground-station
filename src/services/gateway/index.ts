@@ -6,6 +6,7 @@ export interface GatewayConfig {
   httpBaseUrl: string;
   postgresDsn: string;
   staleAfterSec: number;
+  syncSecret: string;
 }
 
 export interface GatewayStatus {
@@ -23,6 +24,7 @@ const previewCfg: GatewayConfig = {
   httpBaseUrl: "",
   postgresDsn: "",
   staleAfterSec: 120,
+  syncSecret: "",
 };
 
 export async function getGatewayConfig(): Promise<GatewayConfig> {

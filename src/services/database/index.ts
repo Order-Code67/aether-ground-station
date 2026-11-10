@@ -31,6 +31,11 @@ export async function dbBackup(): Promise<string | null> {
   return call<string>("db_backup");
 }
 
+export async function dbRestore(path: string): Promise<string | null> {
+  if (!isTauriRuntime()) return null;
+  return call<string>("db_restore", { path });
+}
+
 export async function dbUpsertSetting(key: string, value: string): Promise<void> {
   if (!isTauriRuntime()) {
     memoryKv.set(`setting:${key}`, value);

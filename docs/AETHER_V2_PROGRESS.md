@@ -1,7 +1,15 @@
 # V2 Implementation Progress
 
-**Версия кода:** 0.9.0  
+**Версия кода:** 0.9.0 (+ S2 P0 hardening)  
 **Дата:** 2026-11-11
+
+## S2 — P0 security / data / build gates (post-0.9.0)
+
+- **auth_login:** session role binds only after `db_verify_user_password`; `auth_bind_session` disabled.
+- **db_restore:** SQLite restore + Settings UI (backup→mutate→restore path).
+- **FFmpeg gate:** `npm run ffmpeg:check` / `pretauri:build` fails closed without bundled bins.
+- **Gateway sync:** `X-Ags-Sync-Token` required; stub returns 401 without secret; desktop sends `syncSecret`.
+- **Acceptance:** cargo 6, vitest 13 (auth/restore/syncSecret contracts), typecheck, build, critical, ffmpeg:check green.
 
 ## 0.9.0 — External resources / V2.1 scaffold
 
@@ -23,7 +31,8 @@ RTSP bridge, DEM sample, Gateway outbox, PDF, Playwright B–E.
 
 ## Still external / ops
 
-- Run `ffmpeg:fetch` before release builds (binaries not in git).
+- Run `ffmpeg:fetch` before release builds (binaries not in git); gate enforces at `tauri:build`.
 - Production TLS CA + real CDN endpoints + Authenticode cert purchase.
 - Media SFU for WebRTC (signaling only today).
 - tauri-driver CDP attach for packaged WebView2.
+- Next: **S3** P1 (RTSP hygiene, device reconnect, archive SSOT, outbox retry, permission matrix).

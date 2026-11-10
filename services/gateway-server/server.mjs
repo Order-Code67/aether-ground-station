@@ -18,8 +18,17 @@ const HOST = process.env.GATEWAY_HOST || "127.0.0.1";
 const LOG = path.join(__dirname, "sync-ingest.jsonl");
 const TLS = process.env.GATEWAY_TLS === "1" || process.env.GATEWAY_TLS === "true";
 const DATABASE_URL = process.env.DATABASE_URL || "";
+/** Required for POST /api/v1/sync. Empty → reject all sync (401). */
+const SYNC_SECRET = process.env.GATEWAY_SYNC_SECRET || "";
 
 let pgPool = null;
+
+function readHeader(req, name) {
+  const key = name.toLowerCase();
+  const raw = req.headers[key];
+  if (Array.isArray(raw)) return raw[0] || "";
+  return raw || "";
+}
 
 async function initPg() {
   if (!DATABASE_URL) return null;
@@ -46,7 +55,7 @@ async function initPg() {
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, X-Ags-Sync-Token",
 };
 
 async function handle(req, res) {
@@ -63,11 +72,24 @@ async function handle(req, res) {
         service: "aether-gateway",
         tls: TLS,
         postgres: Boolean(pgPool),
+        syncAuthRequired: true,
       }),
     );
     return;
   }
   if (req.method === "POST" && req.url?.startsWith("/api/v1/sync")) {
+    const token = readHeader(req, "x-ags-sync-token");
+    if (!SYNC_SECRET || token !== SYNC_SECRET) {
+      res.writeHead(401, { ...cors, "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          ok: false,
+          error: "unauthorized",
+          hint: "Set GATEWAY_SYNC_SECRET and send X-Ags-Sync-Token",
+        }),
+      );
+      return;
+    }
     const chunks = [];
     for await (const c of req) chunks.push(c);
     const body = Buffer.concat(chunks).toString("utf8");

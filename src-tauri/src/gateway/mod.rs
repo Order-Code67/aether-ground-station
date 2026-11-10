@@ -18,6 +18,9 @@ pub struct GatewayConfig {
     pub http_base_url: String,
     pub postgres_dsn: String,
     pub stale_after_sec: u64,
+    /// Shared secret for `X-Ags-Sync-Token` (required when syncing).
+    #[serde(default)]
+    pub sync_secret: String,
 }
 
 impl Default for GatewayConfig {
@@ -27,6 +30,7 @@ impl Default for GatewayConfig {
             http_base_url: String::new(),
             postgres_dsn: String::new(),
             stale_after_sec: 120,
+            sync_secret: String::new(),
         }
     }
 }
@@ -149,7 +153,7 @@ fn tcp_reachable(host: &str, port: u16, timeout_ms: u64) -> bool {
     TcpStream::connect_timeout(&a, Duration::from_millis(timeout_ms)).is_ok()
 }
 
-fn http_post_json(base: &str, path: &str, body: &str) -> Result<u16, String> {
+fn http_post_json(base: &str, path: &str, body: &str, sync_secret: &str) -> Result<u16, String> {
     let base = base.trim_end_matches('/');
     let url = format!("{base}{path}");
     let (host, port) = parse_host_port_from_url(&url)
@@ -170,8 +174,13 @@ fn http_post_json(base: &str, path: &str, body: &str) -> Result<u16, String> {
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .ok();
+    let auth_hdr = if sync_secret.is_empty() {
+        String::new()
+    } else {
+        format!("X-Ags-Sync-Token: {sync_secret}\r\n")
+    };
     let req = format!(
-        "POST {path_q} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        "POST {path_q} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\n{auth_hdr}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
     stream.write_all(req.as_bytes()).map_err(|e| e.to_string())?;
@@ -292,6 +301,9 @@ pub fn gateway_try_sync(
     if cfg.http_base_url.trim().is_empty() {
         return Err("Задайте httpBaseUrl для sync".into());
     }
+    if cfg.sync_secret.trim().is_empty() {
+        return Err("Задайте syncSecret (X-Ags-Sync-Token) для sync".into());
+    }
 
     let rows: Vec<(String, String, String)> = with_conn(&state, |conn| {
         let mut stmt = conn
@@ -333,7 +345,15 @@ pub fn gateway_try_sync(
         }).collect::<Vec<_>>(),
     });
     let body = serde_json::to_string(&batch).unwrap_or_else(|_| "{}".into());
-    let code = http_post_json(&cfg.http_base_url, "/api/v1/sync", &body)?;
+    let code = http_post_json(
+        &cfg.http_base_url,
+        "/api/v1/sync",
+        &body,
+        cfg.sync_secret.trim(),
+    )?;
+    if code == 401 {
+        return Err("Gateway sync HTTP 401 — неверный syncSecret".into());
+    }
     if !(200..300).contains(&code) {
         return Err(format!("Gateway sync HTTP {code}"));
     }

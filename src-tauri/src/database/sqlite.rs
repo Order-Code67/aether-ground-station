@@ -46,6 +46,45 @@ fn hash_password(password: &str, salt: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+#[derive(Debug, Clone)]
+pub struct CredentialInfo {
+    pub id: String,
+    pub username: String,
+    pub role: String,
+}
+
+/// Verify username/password and return identity from SQLite (role never from client).
+pub fn verify_credentials(
+    state: &State<'_, DbState>,
+    username: &str,
+    password: &str,
+) -> Result<Option<CredentialInfo>, String> {
+    with_conn(state, |conn| {
+        let row: Option<(String, String, String, String, String, i64)> = conn
+            .query_row(
+                "SELECT id, username, role, password_hash, salt, disabled FROM users WHERE lower(username)=lower(?1)",
+                params![username.trim()],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        let Some((id, uname, role, hash, salt, disabled)) = row else {
+            return Ok(None);
+        };
+        if disabled != 0 {
+            return Ok(None);
+        }
+        if hash_password(password, &salt) != hash {
+            return Ok(None);
+        }
+        Ok(Some(CredentialInfo {
+            id,
+            username: uname,
+            role,
+        }))
+    })
+}
+
 pub fn open_and_migrate(state: &DbState) -> Result<String, String> {
     let path = db_path()?;
     let conn = Connection::open(&path).map_err(|e| e.to_string())?;
@@ -187,6 +226,23 @@ pub fn db_backup(state: State<'_, DbState>) -> Result<String, String> {
     let _ = with_conn(&state, |_| Ok(()))?;
     std::fs::copy(&path, &backup).map_err(|e| e.to_string())?;
     Ok(backup.to_string_lossy().to_string())
+}
+
+/// Restore SQLite from a backup file path (closes connection, replaces file, re-opens).
+#[tauri::command]
+pub fn db_restore(state: State<'_, DbState>, path: String) -> Result<String, String> {
+    let src = std::path::PathBuf::from(path.trim());
+    if !src.is_file() {
+        return Err(format!("Файл backup не найден: {}", src.display()));
+    }
+    let dest = db_path()?;
+    {
+        let mut guard = state.conn.lock().map_err(|_| "DB lock".to_string())?;
+        *guard = None; // close before overwrite
+    }
+    std::fs::copy(&src, &dest).map_err(|e| format!("Не удалось скопировать backup: {e}"))?;
+    open_and_migrate(&state)?;
+    Ok(dest.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -334,23 +390,7 @@ pub fn db_verify_user_password(
     username: String,
     password: String,
 ) -> Result<bool, String> {
-    with_conn(&state, |conn| {
-        let row: Option<(String, String, i64)> = conn
-            .query_row(
-                "SELECT password_hash, salt, disabled FROM users WHERE lower(username)=lower(?1)",
-                params![username],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-            )
-            .optional()
-            .map_err(|e| e.to_string())?;
-        let Some((hash, salt, disabled)) = row else {
-            return Ok(false);
-        };
-        if disabled != 0 {
-            return Ok(false);
-        }
-        Ok(hash_password(&password, &salt) == hash)
-    })
+    Ok(verify_credentials(&state, &username, &password)?.is_some())
 }
 
 #[tauri::command]

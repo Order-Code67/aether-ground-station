@@ -6,6 +6,7 @@ import { isTauriRuntime } from "@/services/tauri";
 import {
   dbBackup,
   dbListUsers,
+  dbRestore,
   dbUpsertUser,
 } from "@/services/database";
 import type { AuthUser } from "@/types/auth";
@@ -17,6 +18,8 @@ export function SettingsView() {
   const setStorageFolder = useArchiveStore((s) => s.setStorageFolder);
   const role = useAuthStore((s) => s.session?.user.role);
   const [backupPath, setBackupPath] = useState<string | null>(null);
+  const [restorePath, setRestorePath] = useState("");
+  const [restoreNote, setRestoreNote] = useState<string | null>(null);
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [newUser, setNewUser] = useState({
     username: "",
@@ -135,6 +138,41 @@ export function SettingsView() {
         </button>
         {backupPath && (
           <p className="font-mono text-xs text-ags-muted">{backupPath}</p>
+        )}
+        <label className="block text-xs text-ags-muted">
+          Восстановить из файла (.sqlite / .bak)
+          <input
+            className="mt-1 w-full rounded border border-ags-border bg-ags-elevated px-2 py-1.5 font-mono text-ags-fg"
+            value={restorePath}
+            onChange={(e) => setRestorePath(e.target.value)}
+            placeholder={backupPath ?? "C:\\…\\ags.sqlite.bak"}
+          />
+        </label>
+        <button
+          type="button"
+          className="rounded border border-ags-border px-3 py-1.5 disabled:opacity-40"
+          disabled={!isTauriRuntime() || !restorePath.trim()}
+          onClick={() => {
+            void dbRestore(restorePath.trim())
+              .then((path) => {
+                setRestoreNote(path ? `Восстановлено: ${path}` : "Ошибка");
+                eventBus.emit(
+                  "info",
+                  "database",
+                  path ? `DB restore OK: ${path}` : "restore failed",
+                );
+              })
+              .catch((e) => {
+                const msg = e instanceof Error ? e.message : String(e);
+                setRestoreNote(msg);
+                eventBus.emit("error", "database", msg);
+              });
+          }}
+        >
+          Восстановить SQLite
+        </button>
+        {restoreNote && (
+          <p className="font-mono text-xs text-ags-warning">{restoreNote}</p>
         )}
       </section>
 
