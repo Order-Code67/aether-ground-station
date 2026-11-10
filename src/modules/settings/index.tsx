@@ -1,15 +1,76 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { useArchiveStore } from "@/stores/archiveStore";
+import { useAuthStore } from "@/stores/authStore";
 import { isTauriRuntime } from "@/services/tauri";
-import { dbBackup } from "@/services/database";
+import {
+  dbBackup,
+  dbListUsers,
+  dbUpsertUser,
+} from "@/services/database";
+import type { AuthUser } from "@/types/auth";
 import { eventBus } from "@/services/events/eventBus";
 
 export function SettingsView() {
   const appInfo = useAppStore((s) => s.appInfo);
   const storageFolder = useArchiveStore((s) => s.storageFolder);
   const setStorageFolder = useArchiveStore((s) => s.setStorageFolder);
+  const role = useAuthStore((s) => s.session?.user.role);
   const [backupPath, setBackupPath] = useState<string | null>(null);
+  const [users, setUsers] = useState<AuthUser[]>([]);
+  const [newUser, setNewUser] = useState({
+    username: "",
+    role: "Operator" as AuthUser["role"],
+    password: "",
+  });
+
+  const refreshUsers = () => {
+    void dbListUsers().then(setUsers).catch(() => setUsers([]));
+  };
+
+  useEffect(() => {
+    refreshUsers();
+  }, []);
+
+  const saveUser = async () => {
+    if (!newUser.username.trim()) return;
+    try {
+      await dbUpsertUser({
+        id: `usr_${newUser.username.trim().toLowerCase()}`,
+        username: newUser.username.trim(),
+        role: newUser.role,
+        password: newUser.password || undefined,
+        disabled: false,
+      });
+      setNewUser({ username: "", role: "Operator", password: "" });
+      refreshUsers();
+      eventBus.emit("info", "users", "Пользователь сохранён");
+    } catch (e) {
+      eventBus.emit(
+        "error",
+        "users",
+        e instanceof Error ? e.message : String(e),
+      );
+    }
+  };
+
+  const toggleDisabled = async (u: AuthUser) => {
+    try {
+      await dbUpsertUser({
+        id: u.id,
+        username: u.username,
+        role: u.role,
+        disabled: !u.disabled,
+      });
+      refreshUsers();
+    } catch (e) {
+      eventBus.emit(
+        "error",
+        "users",
+        e instanceof Error ? e.message : String(e),
+      );
+    }
+  };
 
   return (
     <div className="flex h-full flex-col gap-6 overflow-auto p-8">
@@ -28,7 +89,7 @@ export function SettingsView() {
           <dt className="text-ags-dim">Название</dt>
           <dd>{appInfo?.name ?? "Aether Ground Station"}</dd>
           <dt className="text-ags-dim">Версия</dt>
-          <dd>{appInfo?.version ?? "0.2.0"}</dd>
+          <dd>{appInfo?.version ?? "0.7.0"}</dd>
           <dt className="text-ags-dim">Этап</dt>
           <dd>{appInfo?.stage ?? "—"}</dd>
           <dt className="text-ags-dim">Среда</dt>
@@ -77,6 +138,74 @@ export function SettingsView() {
         )}
       </section>
 
+      {role === "Administrator" && (
+        <section className="max-w-lg space-y-3 rounded-lg border border-ags-border bg-ags-panel p-4 text-sm">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-ags-muted">
+            Пользователи (Administrator)
+          </h2>
+          <ul className="space-y-1 text-xs">
+            {users.map((u) => (
+              <li
+                key={u.id}
+                className="flex items-center justify-between gap-2 rounded border border-ags-border px-2 py-1"
+              >
+                <span>
+                  {u.username} · {u.role}
+                  {u.disabled ? " · disabled" : ""}
+                </span>
+                <button
+                  type="button"
+                  className="rounded border border-ags-border px-2 py-0.5"
+                  onClick={() => void toggleDisabled(u)}
+                >
+                  {u.disabled ? "Включить" : "Отключить"}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap gap-2">
+            <input
+              className="rounded border border-ags-border bg-ags-elevated px-2 py-1"
+              placeholder="username"
+              value={newUser.username}
+              onChange={(e) =>
+                setNewUser((s) => ({ ...s, username: e.target.value }))
+              }
+            />
+            <select
+              className="rounded border border-ags-border bg-ags-elevated px-2 py-1"
+              value={newUser.role}
+              onChange={(e) =>
+                setNewUser((s) => ({
+                  ...s,
+                  role: e.target.value as AuthUser["role"],
+                }))
+              }
+            >
+              <option value="Administrator">Administrator</option>
+              <option value="Operator">Operator</option>
+              <option value="Observer">Observer</option>
+            </select>
+            <input
+              type="password"
+              className="rounded border border-ags-border bg-ags-elevated px-2 py-1"
+              placeholder="password"
+              value={newUser.password}
+              onChange={(e) =>
+                setNewUser((s) => ({ ...s, password: e.target.value }))
+              }
+            />
+            <button
+              type="button"
+              className="rounded bg-ags-accent px-3 py-1 text-white"
+              onClick={() => void saveUser()}
+            >
+              Сохранить
+            </button>
+          </div>
+        </section>
+      )}
+
       <section className="max-w-lg space-y-2 rounded-lg border border-ags-border bg-ags-panel p-4 text-sm text-ags-muted">
         <h2 className="text-xs font-semibold uppercase tracking-wider">
           Безопасность
@@ -84,7 +213,8 @@ export function SettingsView() {
         <ul className="list-disc space-y-1 pl-5 text-xs">
           <li>Секреты не попадают в журналы</li>
           <li>Сканирование оборудования — только с разрешения</li>
-          <li>Плагины без произвольного доступа к ОС (этап SDK)</li>
+          <li>Плагины без произвольного доступа к ОС</li>
+          <li>Observer — read-only; manage users только Administrator</li>
         </ul>
       </section>
     </div>

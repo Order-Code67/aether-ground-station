@@ -110,6 +110,41 @@ export async function dbVerifyUserPassword(
   return call<boolean>("db_verify_user_password", { username, password });
 }
 
+export async function dbUpsertUser(input: {
+  id: string;
+  username: string;
+  role: AuthUser["role"];
+  password?: string;
+  disabled: boolean;
+}): Promise<AuthUser> {
+  if (!isTauriRuntime()) {
+    return {
+      id: input.id,
+      username: input.username,
+      role: input.role,
+      disabled: input.disabled,
+    };
+  }
+  const row = await call<{
+    id: string;
+    username: string;
+    role: string;
+    disabled: boolean;
+  }>("db_upsert_user", {
+    id: input.id,
+    username: input.username,
+    role: input.role,
+    password: input.password ?? null,
+    disabled: input.disabled,
+  });
+  return {
+    id: row.id,
+    username: row.username,
+    role: row.role as AuthUser["role"],
+    disabled: row.disabled,
+  };
+}
+
 export async function dbUpsertRecording(rec: {
   id: string;
   sourceId: string;

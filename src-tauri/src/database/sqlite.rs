@@ -249,6 +249,86 @@ pub fn db_list_users(state: State<'_, DbState>) -> Result<Vec<DbUser>, String> {
 }
 
 #[tauri::command]
+pub fn db_upsert_user(
+    state: State<'_, DbState>,
+    auth: State<'_, crate::auth_session::AuthSessionState>,
+    id: String,
+    username: String,
+    role: String,
+    password: Option<String>,
+    disabled: bool,
+) -> Result<DbUser, String> {
+    crate::auth_session::require_role_write(&auth)?;
+    crate::database::permissions::require(
+        &state,
+        crate::auth_session::current_user(&auth).as_deref(),
+        crate::database::permissions::Permission::ManageUsers,
+    )?;
+    let role = match role.as_str() {
+        "Administrator" | "Operator" | "Observer" => role,
+        _ => return Err("Роль: Administrator | Operator | Observer".into()),
+    };
+    let username = username.trim().to_string();
+    if username.is_empty() {
+        return Err("Имя пользователя пусто".into());
+    }
+    with_conn(&state, |conn| {
+        let existing: Option<(String, String)> = conn
+            .query_row(
+                "SELECT password_hash, salt FROM users WHERE id=?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+
+        let (hash, salt) = if let Some(pw) = password.filter(|p| !p.is_empty()) {
+            let salt = format!("s_{}", id);
+            (hash_password(&pw, &salt), salt)
+        } else if let Some((h, s)) = existing {
+            (h, s)
+        } else {
+            let salt = format!("s_{}", id);
+            (hash_password("changeme", &salt), salt)
+        };
+
+        conn.execute(
+            "INSERT INTO users(id, username, role, password_hash, salt, disabled, configuration)
+             VALUES(?1,?2,?3,?4,?5,?6,'{}')
+             ON CONFLICT(id) DO UPDATE SET
+               username=excluded.username, role=excluded.role,
+               password_hash=excluded.password_hash, salt=excluded.salt,
+               disabled=excluded.disabled",
+            params![id, username, role, hash, salt, disabled as i64],
+        )
+        .map_err(|e| e.to_string())?;
+
+        let _ = conn.execute(
+            "INSERT INTO audit_log(id, user_id, timestamp, event, details)
+             VALUES(?1, ?2, datetime('now'), 'user_upsert', ?3)",
+            params![
+                format!(
+                    "aud_{}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis())
+                        .unwrap_or(0)
+                ),
+                crate::auth_session::current_user(&auth).unwrap_or_else(|| "system".into()),
+                format!("{username}/{role}/disabled={disabled}")
+            ],
+        );
+
+        Ok(DbUser {
+            id,
+            username,
+            role,
+            disabled,
+        })
+    })
+}
+
+#[tauri::command]
 pub fn db_verify_user_password(
     state: State<'_, DbState>,
     username: String,

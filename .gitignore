@@ -37,3 +37,4 @@ coverage/
 test-results/
 playwright-report/
 blob-report/
+services/gateway-server/sync-ingest.jsonl

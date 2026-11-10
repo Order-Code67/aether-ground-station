@@ -12,6 +12,7 @@ commands.allow = [
   "db_upsert_json",
   "db_get_json",
   "db_list_users",
+  "db_upsert_user",
   "db_verify_user_password",
   "db_upsert_recording",
   "db_list_recordings",

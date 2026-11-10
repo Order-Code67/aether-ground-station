@@ -67,6 +67,7 @@ pub fn run() {
             database::sqlite::db_upsert_json,
             database::sqlite::db_get_json,
             database::sqlite::db_list_users,
+            database::sqlite::db_upsert_user,
             database::sqlite::db_verify_user_password,
             database::sqlite::db_upsert_recording,
             database::sqlite::db_list_recordings,

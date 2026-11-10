@@ -190,6 +190,55 @@ export function MapPanel() {
         .setRotation(az)
         .addTo(map);
     });
+
+    const srcId = "ags-station-azimuth";
+    const layerId = "ags-station-azimuth-line";
+    const features = stations
+      .filter((s) => s.azimuthDeg != null)
+      .map((s) => {
+        const az = ((s.azimuthDeg ?? 0) * Math.PI) / 180;
+        const lenDeg = 0.02; // ~2 km visual cue at mid-latitudes
+        const dest = {
+          lng: s.longitude + Math.sin(az) * lenDeg,
+          lat: s.latitude + Math.cos(az) * lenDeg,
+        };
+        return {
+          type: "Feature" as const,
+          properties: { id: s.id, name: s.name },
+          geometry: {
+            type: "LineString" as const,
+            coordinates: [
+              [s.longitude, s.latitude],
+              [dest.lng, dest.lat],
+            ],
+          },
+        };
+      });
+    const data = {
+      type: "FeatureCollection" as const,
+      features,
+    };
+    const apply = () => {
+      if (!map.getSource(srcId)) {
+        map.addSource(srcId, { type: "geojson", data });
+        map.addLayer({
+          id: layerId,
+          type: "line",
+          source: srcId,
+          paint: {
+            "line-color": "#e8a838",
+            "line-width": 2,
+            "line-dasharray": [2, 1],
+          },
+        });
+      } else {
+        (map.getSource(srcId) as import("maplibre-gl").GeoJSONSource).setData(
+          data,
+        );
+      }
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
   }, [stations]);
 
   const addMarkerHere = () => {

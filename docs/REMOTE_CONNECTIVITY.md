@@ -4,8 +4,9 @@
 
 Удалённое подключение к Aether Ground Station через интернет: станции в разных точках, масштабирование от 1 до N объектов.
 
-**На текущем этапе:** архитектура API + локальный stub (`createLocalGatewayStub`) и sandbox.  
-**Полноценный Remote Gateway как отдельный сервис** — деплой вне локальной станции; канал пилотирования не предоставляется.
+**На текущем этапе:** архитектура API + локальный stub (`createLocalGatewayStub`) и sandbox + desktop outbox (`gateway_*` commands).  
+**Минимальный sync receiver:** `npm run gateway:stub` (`services/gateway-server/server.mjs`) — POST `/api/v1/sync` → JSONL (стенд-ин PostgreSQL ingest).  
+**Полноценный Remote Gateway / PostgreSQL** — деплой вне локальной станции; канал пилотирования не предоставляется.
 
 ## Компоненты
 

@@ -1,26 +1,65 @@
-import type { ComponentType } from "react";
+import { Suspense, lazy, type ComponentType } from "react";
 import { MODULES, type ModuleId } from "@/types";
 import { useNavigationStore } from "@/stores/navigationStore";
 import { ModuleErrorBoundary } from "@/components/common/ModuleErrorBoundary";
-import { WorkspaceView } from "@/modules/workspace";
-import { VideoView } from "@/modules/video";
-import { WalksnailView } from "@/modules/walksnail";
-import { MapView } from "@/modules/map";
-import { StationsView } from "@/modules/stations";
-import { TerrainView } from "@/modules/terrain";
-import { PanTiltView } from "@/modules/pantilt";
-import { DevicesView } from "@/modules/devices";
-import { NetworkView } from "@/modules/network";
-import { UsbView } from "@/modules/usb";
-import { SerialView } from "@/modules/serial";
-import { TelemetryView } from "@/modules/telemetry";
-import { ArchiveView } from "@/modules/archive";
-import { InventoryView } from "@/modules/inventory";
-import { ReportsView } from "@/modules/reports";
-import { PluginsView } from "@/modules/plugins";
-import { ProfilesView } from "@/modules/profiles";
-import { RemoteView } from "@/modules/remote";
-import { SettingsView } from "@/modules/settings";
+
+const WorkspaceView = lazy(() =>
+  import("@/modules/workspace").then((m) => ({ default: m.WorkspaceView })),
+);
+const VideoView = lazy(() =>
+  import("@/modules/video").then((m) => ({ default: m.VideoView })),
+);
+const WalksnailView = lazy(() =>
+  import("@/modules/walksnail").then((m) => ({ default: m.WalksnailView })),
+);
+const MapView = lazy(() =>
+  import("@/modules/map").then((m) => ({ default: m.MapView })),
+);
+const StationsView = lazy(() =>
+  import("@/modules/stations").then((m) => ({ default: m.StationsView })),
+);
+const TerrainView = lazy(() =>
+  import("@/modules/terrain").then((m) => ({ default: m.TerrainView })),
+);
+const PanTiltView = lazy(() =>
+  import("@/modules/pantilt").then((m) => ({ default: m.PanTiltView })),
+);
+const DevicesView = lazy(() =>
+  import("@/modules/devices").then((m) => ({ default: m.DevicesView })),
+);
+const NetworkView = lazy(() =>
+  import("@/modules/network").then((m) => ({ default: m.NetworkView })),
+);
+const UsbView = lazy(() =>
+  import("@/modules/usb").then((m) => ({ default: m.UsbView })),
+);
+const SerialView = lazy(() =>
+  import("@/modules/serial").then((m) => ({ default: m.SerialView })),
+);
+const TelemetryView = lazy(() =>
+  import("@/modules/telemetry").then((m) => ({ default: m.TelemetryView })),
+);
+const ArchiveView = lazy(() =>
+  import("@/modules/archive").then((m) => ({ default: m.ArchiveView })),
+);
+const InventoryView = lazy(() =>
+  import("@/modules/inventory").then((m) => ({ default: m.InventoryView })),
+);
+const ReportsView = lazy(() =>
+  import("@/modules/reports").then((m) => ({ default: m.ReportsView })),
+);
+const PluginsView = lazy(() =>
+  import("@/modules/plugins").then((m) => ({ default: m.PluginsView })),
+);
+const ProfilesView = lazy(() =>
+  import("@/modules/profiles").then((m) => ({ default: m.ProfilesView })),
+);
+const RemoteView = lazy(() =>
+  import("@/modules/remote").then((m) => ({ default: m.RemoteView })),
+);
+const SettingsView = lazy(() =>
+  import("@/modules/settings").then((m) => ({ default: m.SettingsView })),
+);
 
 const VIEWS: Record<ModuleId, ComponentType> = {
   workspace: WorkspaceView,
@@ -60,7 +99,13 @@ export function WorkArea() {
   return (
     <main className="min-w-0 flex-1 overflow-auto bg-ags-bg">
       <ModuleErrorBoundary name={def.label}>
-        <View />
+        <Suspense
+          fallback={
+            <div className="p-6 text-sm text-ags-muted">Загрузка модуля…</div>
+          }
+        >
+          <View />
+        </Suspense>
       </ModuleErrorBoundary>
     </main>
   );
