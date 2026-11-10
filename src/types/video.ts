@@ -1,6 +1,12 @@
-/** ТЗ §6: нет устройства / нет сигнала / ок / потеря / запись / ошибка. */
+/**
+ * ТЗ §6 + P1-6 UI alignment:
+ * connecting ≈ unknown/opening; streaming ≈ ok with frames;
+ * no-device / no-signal / lost / recording / error — explicit.
+ */
 export type VideoSignalState =
   | "unknown"
+  | "connecting"
+  | "streaming"
   | "no-device"
   | "no-signal"
   | "ok"
@@ -8,6 +14,32 @@ export type VideoSignalState =
   | "lost"
   | "recording"
   | "error";
+
+/** Map internal/legacy states to operator-facing labels. */
+export function videoSignalLabel(state: VideoSignalState): string {
+  switch (state) {
+    case "connecting":
+    case "unknown":
+      return "Connecting";
+    case "streaming":
+    case "ok":
+      return "Streaming";
+    case "recording":
+      return "Recording";
+    case "no-device":
+      return "No device";
+    case "no-signal":
+      return "No signal";
+    case "lost":
+      return "Lost";
+    case "degraded":
+      return "Degraded";
+    case "error":
+      return "Error";
+    default:
+      return state;
+  }
+}
 
 export interface CaptureDeviceInfo {
   deviceId: string;

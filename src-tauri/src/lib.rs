@@ -57,6 +57,7 @@ pub fn run() {
             gateway::gateway_status,
             gateway::gateway_enqueue,
             gateway::gateway_try_sync,
+            gateway::gateway_retry_failed,
             reports::report_complex_pdf,
             database::sqlite::db_init,
             database::sqlite::db_schema_version,
@@ -84,6 +85,16 @@ pub fn run() {
             database::inventory::telemetry_append,
             database::inventory::report_complex_summary,
         ])
-        .run(tauri::generate_context!())
-        .expect("ошибка запуска Aether Ground Station");
+        .build(tauri::generate_context!())
+        .expect("ошибка сборки Aether Ground Station")
+        .run(|app_handle, event| {
+            if matches!(
+                event,
+                tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
+            ) {
+                if let Some(bridge) = app_handle.try_state::<RtspBridgeState>() {
+                    bridge.force_stop();
+                }
+            }
+        });
 }

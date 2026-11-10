@@ -73,6 +73,7 @@ pub fn inventory_upsert(
     auth: State<'_, AuthSessionState>,
     item: EquipmentRow,
 ) -> Result<EquipmentRow, String> {
+    auth_session::require_role_write(&auth)?;
     permissions::require(
         &state,
         auth_session::current_user(&auth).as_deref(),
@@ -143,6 +144,7 @@ pub fn maintenance_upsert(
     auth: State<'_, AuthSessionState>,
     item: MaintenanceRow,
 ) -> Result<MaintenanceRow, String> {
+    auth_session::require_role_write(&auth)?;
     permissions::require(
         &state,
         auth_session::current_user(&auth).as_deref(),
@@ -175,11 +177,13 @@ pub fn maintenance_upsert(
 #[tauri::command]
 pub fn telemetry_append(
     state: State<'_, DbState>,
+    auth: State<'_, AuthSessionState>,
     id: String,
     device_id: Option<String>,
     at: String,
     payload: String,
 ) -> Result<(), String> {
+    auth_session::require_role_write(&auth)?;
     let _: serde_json::Value =
         serde_json::from_str(&payload).map_err(|e| format!("Неверный JSON: {e}"))?;
     with_conn(&state, |conn| {

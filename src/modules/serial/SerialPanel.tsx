@@ -54,6 +54,13 @@ export function SerialPanel() {
       });
       const st = await serialGetStatus().catch(() => ({ connected: false }));
       setStatus(st);
+      const intent = await deviceManager.loadIntent("uart");
+      if (intent?.path && typeof intent.path === "string") {
+        setPath(intent.path);
+      }
+      if (typeof intent?.baud === "number") {
+        setBaud(intent.baud);
+      }
     })();
     return () => unlisten?.();
   }, []);
@@ -64,6 +71,7 @@ export function SerialPanel() {
       await serialOpen(path, baud);
       const st = await serialGetStatus();
       setStatus(st);
+      deviceManager.saveIntent("uart", { path, baud });
       upsert({
         id,
         name: path,

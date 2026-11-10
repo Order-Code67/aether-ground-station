@@ -44,5 +44,6 @@ commands.allow = [
   "gateway_set_config",
   "gateway_status",
   "gateway_enqueue",
-  "gateway_try_sync"
+  "gateway_try_sync",
+  "gateway_retry_failed"
 ]

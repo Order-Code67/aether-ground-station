@@ -2,17 +2,30 @@
 //! Bridge: ffmpeg writes updating JPEG; UI polls base64 frames (no mock video).
 
 use serde::Serialize;
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, State};
 
 use crate::auth_session::{self, AuthSessionState};
 
+/// Fail closed to "no signal" if first JPEG never appears.
+const FIRST_FRAME_TIMEOUT: Duration = Duration::from_secs(15);
+
 #[derive(Default)]
 pub struct RtspBridgeState {
     inner: Mutex<Option<BridgeRuntime>>,
+}
+
+impl RtspBridgeState {
+    pub fn force_stop(&self) {
+        if let Ok(mut guard) = self.inner.lock() {
+            stop_bridge_locked(&mut guard);
+        }
+    }
 }
 
 struct BridgeRuntime {
@@ -20,6 +33,8 @@ struct BridgeRuntime {
     url: String,
     frame_path: PathBuf,
     started_at: Instant,
+    stderr_tail: Arc<Mutex<String>>,
+    first_frame_at: Option<Instant>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -210,7 +225,6 @@ pub fn video_probe_rtsp(
         .take(8)
         .collect();
 
-    let _ = Duration::from_secs(0);
     Ok(RtspProbeResult {
         ok: true,
         url,
@@ -227,6 +241,8 @@ pub struct RtspBridgeStatus {
     pub url: Option<String>,
     pub frame_path: Option<String>,
     pub uptime_ms: Option<u64>,
+    /// connecting | streaming | no-signal | stopped | error
+    pub phase: String,
     pub message: String,
 }
 
@@ -236,6 +252,44 @@ fn stop_bridge_locked(slot: &mut Option<BridgeRuntime>) {
         let _ = rt.child.wait();
         let _ = std::fs::remove_file(&rt.frame_path);
     }
+}
+
+fn spawn_stderr_drain(child: &mut Child) -> Arc<Mutex<String>> {
+    let tail = Arc::new(Mutex::new(String::new()));
+    if let Some(stderr) = child.stderr.take() {
+        let tail_c = Arc::clone(&tail);
+        thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines().flatten() {
+                if let Ok(mut g) = tail_c.lock() {
+                    *g = line;
+                    if g.len() > 512 {
+                        let start = g.len().saturating_sub(512);
+                        *g = g[start..].to_string();
+                    }
+                }
+            }
+        });
+    }
+    tail
+}
+
+fn frame_ready(path: &PathBuf) -> bool {
+    match std::fs::read(path) {
+        Ok(bytes) => bytes.len() > 100 && bytes.first() == Some(&0xFF) && bytes.get(1) == Some(&0xD8),
+        Err(_) => false,
+    }
+}
+
+fn stderr_hint(tail: &Arc<Mutex<String>>) -> Option<String> {
+    tail.lock().ok().and_then(|g| {
+        let t = g.trim();
+        if t.is_empty() {
+            None
+        } else {
+            Some(t.to_string())
+        }
+    })
 }
 
 #[tauri::command]
@@ -266,12 +320,13 @@ pub fn video_rtsp_bridge_start(
         .to_str()
         .ok_or_else(|| "Некорректный путь кадра".to_string())?
         .to_string();
+    let _ = std::fs::remove_file(&frame_path);
 
     let mut guard = bridge.inner.lock().map_err(|e| e.to_string())?;
     stop_bridge_locked(&mut guard);
 
     // Continuously overwrite a single JPEG (~5–10 fps). Real decode path; no synthetic frames.
-    let child = Command::new(&ffmpeg)
+    let mut child = Command::new(&ffmpeg)
         .args([
             "-hide_banner",
             "-loglevel",
@@ -298,11 +353,15 @@ pub fn video_rtsp_bridge_start(
         .spawn()
         .map_err(|e| format!("Не удалось запустить FFmpeg bridge: {e}"))?;
 
+    let stderr_tail = spawn_stderr_drain(&mut child);
+
     *guard = Some(BridgeRuntime {
         child,
         url: url.clone(),
         frame_path: frame_path.clone(),
         started_at: Instant::now(),
+        stderr_tail,
+        first_frame_at: None,
     });
 
     Ok(RtspBridgeStatus {
@@ -310,7 +369,8 @@ pub fn video_rtsp_bridge_start(
         url: Some(url),
         frame_path: Some(frame_str),
         uptime_ms: Some(0),
-        message: "RTSP JPEG bridge запущен".into(),
+        phase: "connecting".into(),
+        message: "RTSP JPEG bridge запущен — ожидание первого кадра".into(),
     })
 }
 
@@ -327,6 +387,7 @@ pub fn video_rtsp_bridge_stop(
         url: None,
         frame_path: None,
         uptime_ms: None,
+        phase: "stopped".into(),
         message: "RTSP bridge остановлен".into(),
     })
 }
@@ -340,26 +401,63 @@ pub fn video_rtsp_bridge_status(bridge: State<'_, RtspBridgeState>) -> Result<Rt
             url: None,
             frame_path: None,
             uptime_ms: None,
+            phase: "stopped".into(),
             message: "Bridge не запущен".into(),
         });
     };
     if let Ok(Some(status)) = rt.child.try_wait() {
         let code = status.code().unwrap_or(-1);
+        let hint = stderr_hint(&rt.stderr_tail).unwrap_or_default();
         stop_bridge_locked(&mut guard);
+        let detail = if hint.is_empty() {
+            format!("FFmpeg завершился (code {code}) — нет сигнала / ошибка декода")
+        } else {
+            format!("FFmpeg code {code}: {hint}")
+        };
         return Ok(RtspBridgeStatus {
             running: false,
             url: None,
             frame_path: None,
             uptime_ms: None,
-            message: format!("FFmpeg завершился (code {code}) — нет сигнала / ошибка декода"),
+            phase: "error".into(),
+            message: detail,
         });
     }
+
+    if frame_ready(&rt.frame_path) {
+        if rt.first_frame_at.is_none() {
+            rt.first_frame_at = Some(Instant::now());
+        }
+        return Ok(RtspBridgeStatus {
+            running: true,
+            url: Some(rt.url.clone()),
+            frame_path: Some(rt.frame_path.to_string_lossy().into()),
+            uptime_ms: Some(rt.started_at.elapsed().as_millis() as u64),
+            phase: "streaming".into(),
+            message: "Bridge активен — streaming".into(),
+        });
+    }
+
+    if rt.started_at.elapsed() > FIRST_FRAME_TIMEOUT {
+        let hint = stderr_hint(&rt.stderr_tail)
+            .unwrap_or_else(|| "таймаут первого кадра".into());
+        return Ok(RtspBridgeStatus {
+            running: true,
+            url: Some(rt.url.clone()),
+            frame_path: Some(rt.frame_path.to_string_lossy().into()),
+            uptime_ms: Some(rt.started_at.elapsed().as_millis() as u64),
+            phase: "no-signal".into(),
+            message: format!("Нет сигнала: {hint}"),
+        });
+    }
+
     Ok(RtspBridgeStatus {
         running: true,
         url: Some(rt.url.clone()),
         frame_path: Some(rt.frame_path.to_string_lossy().into()),
         uptime_ms: Some(rt.started_at.elapsed().as_millis() as u64),
-        message: "Bridge активен".into(),
+        phase: "connecting".into(),
+        message: "Ожидание первого кадра…".into(),
     })
 }
 
@@ -375,8 +473,8 @@ pub struct RtspBridgeFrame {
 
 #[tauri::command]
 pub fn video_rtsp_bridge_frame(bridge: State<'_, RtspBridgeState>) -> Result<RtspBridgeFrame, String> {
-    let guard = bridge.inner.lock().map_err(|e| e.to_string())?;
-    let Some(rt) = guard.as_ref() else {
+    let mut guard = bridge.inner.lock().map_err(|e| e.to_string())?;
+    let Some(rt) = guard.as_mut() else {
         return Ok(RtspBridgeFrame {
             ok: false,
             mime: "image/jpeg".into(),
@@ -385,8 +483,22 @@ pub fn video_rtsp_bridge_frame(bridge: State<'_, RtspBridgeState>) -> Result<Rts
             error: Some("Bridge не запущен".into()),
         });
     };
+    if let Ok(Some(_)) = rt.child.try_wait() {
+        let hint = stderr_hint(&rt.stderr_tail).unwrap_or_else(|| "процесс завершён".into());
+        stop_bridge_locked(&mut guard);
+        return Ok(RtspBridgeFrame {
+            ok: false,
+            mime: "image/jpeg".into(),
+            base64: None,
+            size_bytes: None,
+            error: Some(format!("Нет сигнала: {hint}")),
+        });
+    }
     match std::fs::read(&rt.frame_path) {
         Ok(bytes) if bytes.len() > 100 && bytes[0] == 0xFF && bytes[1] == 0xD8 => {
+            if rt.first_frame_at.is_none() {
+                rt.first_frame_at = Some(Instant::now());
+            }
             Ok(RtspBridgeFrame {
                 ok: true,
                 mime: "image/jpeg".into(),
@@ -395,20 +507,22 @@ pub fn video_rtsp_bridge_frame(bridge: State<'_, RtspBridgeState>) -> Result<Rts
                 error: None,
             })
         }
-        Ok(_) => Ok(RtspBridgeFrame {
-            ok: false,
-            mime: "image/jpeg".into(),
-            base64: None,
-            size_bytes: None,
-            error: Some("Кадр ещё не готов".into()),
-        }),
-        Err(_) => Ok(RtspBridgeFrame {
-            ok: false,
-            mime: "image/jpeg".into(),
-            base64: None,
-            size_bytes: None,
-            error: Some("Кадр ещё не готов".into()),
-        }),
+        Ok(_) | Err(_) => {
+            let err = if rt.started_at.elapsed() > FIRST_FRAME_TIMEOUT {
+                let hint = stderr_hint(&rt.stderr_tail)
+                    .unwrap_or_else(|| "таймаут первого кадра".into());
+                format!("Нет сигнала: {hint}")
+            } else {
+                "Кадр ещё не готов".into()
+            };
+            Ok(RtspBridgeFrame {
+                ok: false,
+                mime: "image/jpeg".into(),
+                base64: None,
+                size_bytes: None,
+                error: Some(err),
+            })
+        }
     }
 }
 
@@ -434,4 +548,15 @@ fn base64_encode(data: &[u8]) -> String {
         });
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn first_frame_timeout_is_bounded() {
+        assert!(FIRST_FRAME_TIMEOUT.as_secs() >= 5);
+        assert!(FIRST_FRAME_TIMEOUT.as_secs() <= 30);
+    }
 }

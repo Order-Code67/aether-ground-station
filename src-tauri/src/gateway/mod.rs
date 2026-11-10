@@ -42,6 +42,7 @@ pub struct GatewayStatus {
     pub http_reachable: Option<bool>,
     pub postgres_reachable: Option<bool>,
     pub pending_outbox: i64,
+    pub failed_outbox: i64,
     pub last_sync_at: Option<String>,
     pub stale: bool,
     pub message: String,
@@ -74,17 +75,41 @@ fn save_config(state: &State<'_, DbState>, cfg: &GatewayConfig) -> Result<(), St
     })
 }
 
-fn outbox_pending(state: &State<'_, DbState>) -> i64 {
+fn outbox_count(state: &State<'_, DbState>, status: &str) -> i64 {
     with_conn(state, |conn| {
         Ok(conn
             .query_row(
-                "SELECT COUNT(*) FROM sync_outbox WHERE status='pending'",
-                [],
+                "SELECT COUNT(*) FROM sync_outbox WHERE status=?1",
+                params![status],
                 |r| r.get(0),
             )
             .unwrap_or(0))
     })
     .unwrap_or(0)
+}
+
+fn outbox_pending(state: &State<'_, DbState>) -> i64 {
+    outbox_count(state, "pending")
+}
+
+fn outbox_failed(state: &State<'_, DbState>) -> i64 {
+    outbox_count(state, "failed")
+}
+
+fn mark_outbox_failed(state: &State<'_, DbState>, ids: &[String], err: &str) -> Result<(), String> {
+    let now = chrono_now();
+    with_conn(state, |conn| {
+        for id in ids {
+            conn.execute(
+                "UPDATE sync_outbox
+                 SET status='failed', attempts=COALESCE(attempts,0)+1, last_error=?2, updated_at=?3
+                 WHERE id=?1",
+                params![id, err, now],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })
 }
 
 fn last_sync(state: &State<'_, DbState>) -> Option<String> {
@@ -221,6 +246,7 @@ pub fn gateway_status(state: State<'_, DbState>) -> Result<GatewayStatus, String
             http_reachable: None,
             postgres_reachable: None,
             pending_outbox: outbox_pending(&state),
+            failed_outbox: outbox_failed(&state),
             last_sync_at: last_sync(&state),
             stale: false,
             message: "Gateway выключен — локальный SQLite SSOT".into(),
@@ -255,11 +281,18 @@ pub fn gateway_status(state: State<'_, DbState>) -> Result<GatewayStatus, String
         (Some(true), _) | (_, Some(true)) => "Канал Central Gateway доступен".into(),
         _ => "Gateway включён, endpoints не заданы".into(),
     };
+    let failed = outbox_failed(&state);
+    let message = if failed > 0 {
+        format!("{message} · failed outbox: {failed}")
+    } else {
+        message
+    };
     Ok(GatewayStatus {
         enabled: true,
         http_reachable: http_ok,
         postgres_reachable: pg_ok,
         pending_outbox: outbox_pending(&state),
+        failed_outbox: failed,
         last_sync_at: last,
         stale,
         message,
@@ -345,24 +378,35 @@ pub fn gateway_try_sync(
         }).collect::<Vec<_>>(),
     });
     let body = serde_json::to_string(&batch).unwrap_or_else(|_| "{}".into());
-    let code = http_post_json(
+    let ids: Vec<String> = rows.iter().map(|(id, _, _)| id.clone()).collect();
+    let code = match http_post_json(
         &cfg.http_base_url,
         "/api/v1/sync",
         &body,
         cfg.sync_secret.trim(),
-    )?;
+    ) {
+        Ok(c) => c,
+        Err(e) => {
+            mark_outbox_failed(&state, &ids, &e)?;
+            return Err(e);
+        }
+    };
     if code == 401 {
-        return Err("Gateway sync HTTP 401 — неверный syncSecret".into());
+        let msg = "Gateway sync HTTP 401 — неверный syncSecret";
+        mark_outbox_failed(&state, &ids, msg)?;
+        return Err(msg.into());
     }
     if !(200..300).contains(&code) {
-        return Err(format!("Gateway sync HTTP {code}"));
+        let msg = format!("Gateway sync HTTP {code}");
+        mark_outbox_failed(&state, &ids, &msg)?;
+        return Err(msg);
     }
 
     let now = chrono_now();
     with_conn(&state, |conn| {
         for (id, _, _) in &rows {
             conn.execute(
-                "UPDATE sync_outbox SET status='sent', updated_at=?2 WHERE id=?1",
+                "UPDATE sync_outbox SET status='sent', last_error=NULL, updated_at=?2 WHERE id=?1",
                 params![id, now],
             )
             .map_err(|e| e.to_string())?;
@@ -377,6 +421,25 @@ pub fn gateway_try_sync(
     })?;
 
     gateway_status(state)
+}
+
+#[tauri::command]
+pub fn gateway_retry_failed(
+    state: State<'_, DbState>,
+    auth: State<'_, AuthSessionState>,
+) -> Result<GatewayStatus, String> {
+    auth_session::require_role_write(&auth)?;
+    let now = chrono_now();
+    with_conn(&state, |conn| {
+        conn.execute(
+            "UPDATE sync_outbox SET status='pending', last_error=NULL, updated_at=?1
+             WHERE status='failed'",
+            params![now],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    })?;
+    gateway_try_sync(state, auth)
 }
 
 fn chrono_now() -> String {

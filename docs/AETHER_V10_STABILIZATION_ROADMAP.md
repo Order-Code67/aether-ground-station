@@ -66,29 +66,23 @@
 
 ### P1 — надёжность Core / Devices / Video / Gateway
 
-#### P1-1 RTSP bridge process hygiene
-- Читать/drain stderr; kill on app exit; timeout first-frame; clear status.  
-- **Файлы:** `video/mod.rs`, VideoPanel  
-- **Приёмка:** stop освобождает PID; повторный start OK; no-signal message.
+#### P1-1 RTSP bridge process hygiene — **DONE (S3)**
+- stderr drain; kill on Exit/ExitRequested; first-frame timeout → no-signal; `phase` field. ✅
 
-#### P1-2 Device reconnect after app restart
-- Persist last device intents or document re-register; no hung UI on lost COM.  
-- **Файлы:** deviceManager, SerialPanel  
+#### P1-2 Device reconnect after app restart — **DONE (S3)**
+- hydrate Online→Offline; `device_intents` for Serial/RTSP restore; panel re-bind required. ✅
 
-#### P1-3 Archive SSOT
-- Перенести clips metadata в SQLite; убрать localStorage persist или сделать cache-only.  
-- **Файлы:** `archiveStore.ts`  
+#### P1-3 Archive SSOT — **DONE (S3)**
+- removed zustand persist; SQLite `archive_state` via useSqliteSync. ✅
 
-#### P1-4 Outbox retry / failure states
-- status `failed` + retry; не помечать sent при HTTP error; backoff.  
-- **Файлы:** `gateway/mod.rs`, server  
+#### P1-4 Outbox retry / failure states — **DONE (S3)**
+- migration v4 attempts/last_error; mark `failed` on HTTP error; `gateway_retry_failed`. ✅
 
-#### P1-5 Permission matrix coverage
-- Inventory всех write commands → `require` + table in docs.  
-- **Тесты:** forbidden for Observer.
+#### P1-5 Permission matrix coverage — **DONE (S3)**
+- `docs/AETHER_PERMISSION_MATRIX.md`; station/inventory/telemetry + writes use `require_role_write`. ✅
 
-#### P1-6 Video signal state alignment
-- Явные UI states Connecting/Streaming или документировать mapping на existing enum.
+#### P1-6 Video signal state alignment — **DONE (S3)**
+- `connecting` / `streaming` + `videoSignalLabel` (Connecting/Streaming). ✅
 
 ---
 
@@ -119,7 +113,7 @@
 | Пакет | Содержание | Выход |
 |-------|------------|-------|
 | **S2** | P0-1..P0-4 **закрыто** (auth_login, db_restore, ffmpeg gate, sync secret) | Security+data gates |
-| **S3** | P1 Video/Device/Archive/Outbox | Reliability |
+| **S3** | P1 Video/Device/Archive/Outbox/ACL/signal **закрыто** | Reliability |
 | **S4** | P2 tests + HW lab notes | Evidence pack |
 | **S5** | NSIS build smoke + Release Checklist sign-off | 1.0.0 candidate |
 | **S6+** | P3 optional | 1.1 |

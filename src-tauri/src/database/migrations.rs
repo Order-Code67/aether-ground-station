@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection};
 
-/// Versioned migrations. Current schema version = 3 (Gateway outbox).
-pub const SCHEMA_VERSION: i64 = 3;
+/// Versioned migrations. Current schema version = 4 (outbox attempts/failed).
+pub const SCHEMA_VERSION: i64 = 4;
 
 pub fn apply_migrations(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
@@ -32,10 +32,15 @@ pub fn apply_migrations(conn: &Connection) -> Result<(), String> {
         migrate_v3(conn)?;
         stamp(conn, 3)?;
     }
+    if current < 4 {
+        migrate_v4(conn)?;
+        stamp(conn, 4)?;
+    }
 
     // Ensure foreign keys on for this connection
     conn.execute_batch("PRAGMA foreign_keys = ON;")
         .map_err(|e| e.to_string())?;
+    let _ = SCHEMA_VERSION;
     Ok(())
 }
 
@@ -292,4 +297,14 @@ fn migrate_v3(conn: &Connection) -> Result<(), String> {
         "#,
     )
     .map_err(|e| e.to_string())
+}
+
+fn migrate_v4(conn: &Connection) -> Result<(), String> {
+    // Best-effort ALTER — columns may already exist on re-run of incomplete upgrades.
+    let _ = conn.execute(
+        "ALTER TABLE sync_outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0",
+        [],
+    );
+    let _ = conn.execute("ALTER TABLE sync_outbox ADD COLUMN last_error TEXT", []);
+    Ok(())
 }

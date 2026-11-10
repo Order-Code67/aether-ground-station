@@ -10,6 +10,7 @@ import {
   getGatewayStatus,
   setGatewayConfig,
   tryGatewaySync,
+  retryFailedGateway,
   enqueueGateway,
   type GatewayConfig,
   type GatewayStatus,
@@ -89,6 +90,19 @@ export function RemoteView() {
     }
   };
 
+  const retryFailed = async () => {
+    try {
+      const st = await retryFailedGateway();
+      setStatus(st);
+      eventBus.emit("info", "gateway", `Retry failed → ${st.message}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setNote(msg);
+      eventBus.emit("warning", "gateway", msg);
+      setStatus(await getGatewayStatus());
+    }
+  };
+
   return (
     <div className="flex h-full flex-col gap-6 overflow-auto p-8">
       <div>
@@ -156,12 +170,22 @@ export function RemoteView() {
           >
             Статус
           </button>
+          <button
+            type="button"
+            className="rounded border border-ags-border px-3 py-1.5"
+            onClick={() => void retryFailed()}
+          >
+            Retry failed
+          </button>
         </div>
         {status && (
           <div className="space-y-1 text-xs text-ags-muted">
             <p>{status.message}</p>
             <p>
               outbox: {status.pendingOutbox}
+              {typeof status.failedOutbox === "number" && status.failedOutbox > 0
+                ? ` · failed: ${status.failedOutbox}`
+                : ""}
               {status.stale ? " · STALE" : ""}
               {status.httpReachable === false ? " · HTTP down" : ""}
               {status.postgresReachable === false ? " · PG down" : ""}

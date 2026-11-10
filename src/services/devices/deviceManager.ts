@@ -1,6 +1,6 @@
 import type { DeviceCard, DeviceStatus } from "@/types";
 import { eventBus } from "@/services/events/eventBus";
-import { dbUpsertJson } from "@/services/database";
+import { dbGetJson, dbUpsertJson } from "@/services/database";
 
 type Listener = (devices: DeviceCard[]) => void;
 
@@ -107,10 +107,51 @@ class DeviceManager {
     eventBus.emit("info", "device-manager", `Повторное подключение: ${id}`);
   }
 
+  /**
+   * After app restart: restore cards but mark live Online sessions Offline.
+   * Reconnect handlers are session-only — open Serial/Video panel to re-bind.
+   */
   hydrate(snapshot: DeviceCard[]): void {
     this.devices.clear();
-    for (const d of snapshot) this.devices.set(d.id, d);
+    const now = new Date().toISOString();
+    for (const d of snapshot) {
+      const wasLive = d.status === "Online" || d.status === "Reconnecting";
+      this.devices.set(d.id, {
+        ...d,
+        status: wasLive ? "Offline" : d.status,
+        lastSeenAt: now,
+      });
+    }
     this.emit();
+    if (snapshot.some((d) => d.status === "Online" || d.status === "Reconnecting")) {
+      eventBus.emit(
+        "info",
+        "device-manager",
+        "После перезапуска откройте Serial/Video для повторного подключения",
+      );
+    }
+  }
+
+  /** Persist last open intent (COM path/baud, RTSP URL) for panel restore. */
+  saveIntent(kind: string, intent: Record<string, unknown>): void {
+    void (async () => {
+      const cur = await dbGetJson<Record<string, Record<string, unknown>>>(
+        "device_intents",
+        {},
+      );
+      cur[kind] = { ...intent, savedAt: new Date().toISOString() };
+      await dbUpsertJson("device_intents", cur);
+    })();
+  }
+
+  async loadIntent(
+    kind: string,
+  ): Promise<Record<string, unknown> | null> {
+    const cur = await dbGetJson<Record<string, Record<string, unknown>>>(
+      "device_intents",
+      {},
+    );
+    return cur[kind] ?? null;
   }
 }
 

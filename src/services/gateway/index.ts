@@ -14,6 +14,7 @@ export interface GatewayStatus {
   httpReachable?: boolean | null;
   postgresReachable?: boolean | null;
   pendingOutbox: number;
+  failedOutbox?: number;
   lastSyncAt?: string | null;
   stale: boolean;
   message: string;
@@ -65,4 +66,9 @@ export async function enqueueGateway(
 export async function tryGatewaySync(): Promise<GatewayStatus> {
   if (!isTauriRuntime()) throw new Error("только Tauri");
   return invoke("gateway_try_sync");
+}
+
+export async function retryFailedGateway(): Promise<GatewayStatus> {
+  if (!isTauriRuntime()) throw new Error("только Tauri");
+  return invoke("gateway_retry_failed");
 }

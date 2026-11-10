@@ -12,10 +12,12 @@ import {
 import {
   getFfmpegStatus,
   getRtspBridgeFrame,
+  getRtspBridgeStatus,
   stopRtspBridge,
 } from "@/services/video/ffmpeg";
 import { saveRecordingToDisk } from "@/services/video/recording";
 import type { CaptureDeviceInfo, VideoSignalState } from "@/types";
+import { videoSignalLabel } from "@/types/video";
 import { eventBus } from "@/services/events/eventBus";
 import { useArchiveStore } from "@/stores/archiveStore";
 import { deviceManager } from "@/services/devices/deviceManager";
@@ -47,6 +49,11 @@ export function VideoPanel() {
     void getFfmpegStatus()
       .then((s) => setFfmpegMsg(s.message))
       .catch(() => setFfmpegMsg(null));
+    void deviceManager.loadIntent("rtsp").then((intent) => {
+      if (intent?.url && typeof intent.url === "string") {
+        setSourceUrl(intent.url);
+      }
+    });
   }, []);
 
   const cleanupMedia = async () => {
@@ -88,17 +95,23 @@ export function VideoPanel() {
   const connect = async () => {
     await cleanupMedia();
     setError(null);
-    setSignal("unknown");
+    setSignal("connecting");
     const adapter = getVideoAdapter(adapterKind);
     const sourceId =
       adapterKind === "mediadevices" ? selected : sourceUrl.trim();
     const cardId = `video:${adapterKind}:${sourceId || "default"}`;
+    if (adapterKind === "rtsp" && sourceId) {
+      deviceManager.saveIntent("rtsp", { url: sourceId });
+    }
+    if (adapterKind === "mediadevices" && sourceId) {
+      deviceManager.saveIntent("uvc", { deviceId: sourceId });
+    }
     try {
       const opened = await adapter.open(sourceId);
       if (isRtspBridgeHandle(opened)) {
         bridgeRef.current = opened;
         setBridgeMode(true);
-        setSignal("ok");
+        setSignal("connecting");
         deviceManager.upsert({
           id: cardId,
           name: adapter.label,
@@ -117,7 +130,7 @@ export function VideoPanel() {
         videoRef.current.srcObject = opened;
         await videoRef.current.play();
       }
-      setSignal("ok");
+      setSignal("streaming");
       deviceManager.upsert({
         id: cardId,
         name: adapter.label,
@@ -184,7 +197,11 @@ export function VideoPanel() {
           frames = 0;
           last = now;
         }
-      } else if (signal === "ok" || signal === "recording") {
+      } else if (
+        signal === "ok" ||
+        signal === "streaming" ||
+        signal === "recording"
+      ) {
         setSignal("no-signal");
         setError("Нет сигнала");
       }
@@ -194,19 +211,43 @@ export function VideoPanel() {
     return () => cancelAnimationFrame(raf);
   }, [signal, bridgeMode]);
 
-  // RTSP JPEG bridge poll
+  // RTSP JPEG bridge poll + phase alignment
   useEffect(() => {
-    if (!bridgeMode || signal !== "ok") return;
+    if (!bridgeMode) return;
+    if (
+      signal !== "ok" &&
+      signal !== "streaming" &&
+      signal !== "connecting"
+    ) {
+      return;
+    }
     let alive = true;
     let frames = 0;
     let last = performance.now();
     const poll = async () => {
       while (alive) {
         try {
+          const st = await getRtspBridgeStatus();
+          if (!alive) break;
+          if (st.phase === "no-signal" || st.phase === "error") {
+            setSignal("no-signal");
+            setError(st.message);
+          } else if (st.phase === "streaming") {
+            setSignal("streaming");
+            setError(null);
+          } else if (st.phase === "connecting") {
+            setSignal("connecting");
+          } else if (!st.running) {
+            setSignal("lost");
+            setError(st.message);
+            break;
+          }
           const frame = await getRtspBridgeFrame();
           if (!alive) break;
           if (frame.ok && frame.base64 && imgRef.current) {
             imgRef.current.src = `data:${frame.mime};base64,${frame.base64}`;
+            setSignal("streaming");
+            setError(null);
             frames += 1;
             const now = performance.now();
             if (now - last >= 1000) {
@@ -220,6 +261,9 @@ export function VideoPanel() {
                 h: imgRef.current.naturalHeight,
               });
             }
+          } else if (frame.error?.startsWith("Нет сигнала")) {
+            setSignal("no-signal");
+            setError(frame.error);
           }
         } catch {
           /* ignore transient */
@@ -335,7 +379,9 @@ export function VideoPanel() {
         </button>
         <button
           type="button"
-          disabled={signal !== "ok" || bridgeMode}
+          disabled={
+            (signal !== "ok" && signal !== "streaming") || bridgeMode
+          }
           onClick={toggleRecord}
           className="rounded border border-ags-border px-2 py-1 disabled:opacity-40"
         >
@@ -369,21 +415,23 @@ export function VideoPanel() {
             playsInline
           />
         )}
-        {signal !== "ok" && (
+        {signal !== "ok" && signal !== "streaming" && signal !== "recording" && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-4 text-center text-sm text-ags-muted">
             {error ??
-              (signal === "no-device"
-                ? "Нет устройства"
-                : signal === "lost"
-                  ? "Нет сигнала"
-                  : "Нет видеопотока")}
+              (signal === "connecting"
+                ? "Connecting…"
+                : signal === "no-device"
+                  ? "Нет устройства"
+                  : signal === "lost" || signal === "no-signal"
+                    ? "Нет сигнала"
+                    : "Нет видеопотока")}
           </div>
         )}
       </div>
 
       <div className="flex flex-wrap gap-4 font-mono text-[11px] text-ags-muted">
         <span>Адаптер: {adapterKind}</span>
-        <span>Сигнал: {signal}</span>
+        <span>Сигнал: {videoSignalLabel(signal)}</span>
         <span>FPS: {fps ?? "—"}</span>
         <span>
           Разрешение:{" "}

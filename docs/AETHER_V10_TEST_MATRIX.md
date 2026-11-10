@@ -23,7 +23,7 @@
 | T15 | Core | Backup | `.bak` created | NOT_RUN (command exists) | NOT_RUN | Tauri |
 | T16 | Core | Restore | data restored | `db_restore` + Settings UI + contract test | PASS (contract) | Tauri for full UI |
 | T17 | SSOT | workspace↔SQLite | hydrate+mirror | code+critical structural | PARTIAL | Tauri for full |
-| T18 | SSOT | archive localStorage | documented debt | confirmed persist() | FAIL vs SSOT claim | — |
+| T18 | SSOT | archive localStorage | SQLite SSOT | persist removed; archive_state sync | PASS (contract) | — |
 | T19 | Auth | login password verify | hash check | code path | NOT_RUN e2e | Tauri |
 | T20 | Auth | Observer write blocked | Err Observer | code `require_role_write` | NOT_RUN | Tauri |
 | T21 | Auth | bind session spoof role | must fail after P0-1 | bind disabled; auth_login only | PASS (contract+cargo) | — |
@@ -59,7 +59,7 @@
 | T51 | Telemetry | SQLite append | row written | code | NOT_RUN | Tauri+serial |
 | T52 | Telemetry | History after restart | reload | UI session-only | FAIL/PARTIAL | — |
 | T53 | Gateway | enqueue outbox | row pending | code | NOT_RUN | Tauri |
-| T54 | Gateway | try_sync HTTP | sent | code plaintext HTTP | NOT_RUN | stub server |
+| T54 | Gateway | try_sync HTTP | sent / failed+retry | failed status + retry_failed | PASS (contract) | stub server |
 | T55 | Gateway | TLS server | https health | server supports | NOT_RUN | certs |
 | T56 | Gateway | PG ingest | rows in sync_events | server optional | NOT_RUN | PostgreSQL |
 | T57 | Gateway | Desktop PG | SQL queries | **TCP probe only** | N/A | — |

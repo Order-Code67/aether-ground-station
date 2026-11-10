@@ -22,6 +22,8 @@ export interface RtspBridgeStatus {
   url?: string | null;
   framePath?: string | null;
   uptimeMs?: number | null;
+  /** connecting | streaming | no-signal | stopped | error */
+  phase?: string;
   message: string;
 }
 

@@ -2,6 +2,8 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use crate::auth_session::{self, AuthSessionState};
+
 use super::permissions::{self, Permission};
 use super::sqlite::{with_conn, DbState};
 
@@ -95,9 +97,12 @@ fn map_station(row: &rusqlite::Row<'_>) -> rusqlite::Result<StationRow> {
 #[tauri::command]
 pub fn station_upsert(
     state: State<'_, DbState>,
+    auth: State<'_, AuthSessionState>,
     actor: Option<String>,
     station: StationRow,
 ) -> Result<StationRow, String> {
+    auth_session::require_role_write(&auth)?;
+    let actor = auth_session::current_user(&auth).or(actor);
     permissions::require(&state, actor.as_deref(), Permission::ManageDevices)?;
     let mut s = station;
     s.antenna_center_amsl_m = antenna_center_amsl(
@@ -162,9 +167,12 @@ pub fn station_upsert(
 #[tauri::command]
 pub fn station_delete(
     state: State<'_, DbState>,
+    auth: State<'_, AuthSessionState>,
     actor: Option<String>,
     id: String,
 ) -> Result<(), String> {
+    auth_session::require_role_write(&auth)?;
+    let actor = auth_session::current_user(&auth).or(actor);
     permissions::require(&state, actor.as_deref(), Permission::ManageDevices)?;
     with_conn(&state, |conn| {
         conn.execute("DELETE FROM stations WHERE id=?1", params![id])
