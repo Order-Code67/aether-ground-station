@@ -40,7 +40,7 @@ export function offlineStyle(
           type: "raster",
           tiles: [template],
           tileSize: 256,
-          attribution: "Aether offline tiles",
+          attribution: "Aether offline · Центральная Россия",
           maxzoom: 12,
         },
       },
