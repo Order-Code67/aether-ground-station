@@ -4,6 +4,7 @@ import { LoginScreen } from "@/components/auth/LoginScreen";
 import { ModuleErrorBoundary } from "@/components/common/ModuleErrorBoundary";
 import { useAppBootstrap } from "@/hooks/useAppBootstrap";
 import { useSqliteSync } from "@/hooks/useSqliteSync";
+import { useAuthIdleGuard } from "@/hooks/useAuthIdleGuard";
 import { eventBus } from "@/services/events/eventBus";
 import { dbAppendEvent, dbInit, dbGetJson } from "@/services/database";
 import { deviceManager } from "@/services/devices/deviceManager";
@@ -14,6 +15,7 @@ import type { DeviceCard } from "@/types";
 export default function App() {
   useAppBootstrap();
   useSqliteSync();
+  useAuthIdleGuard();
   const append = useEventLogStore((s) => s.append);
   const ready = useAuthStore((s) => s.ready);
   const session = useAuthStore((s) => s.session);

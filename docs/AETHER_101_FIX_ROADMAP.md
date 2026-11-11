@@ -89,19 +89,21 @@
 
 ### 1.0.1-A — Security (делать первыми, узкий diff)
 
-| Task | Fix | Failure |
-|------|-----|---------|
-| SEC-1 | Idle session timeout + re-login | F-005 |
-| SEC-2 | Protect `syncSecret` at rest | F-004 |
+| Task | Fix | Failure | Status |
+|------|-----|---------|--------|
+| SEC-1 | Idle session timeout + re-login (45 min, `auth_touch`) | F-005 / PR-01 | **DONE** on `release/1.0.1-validation` |
+| SEC-2 | Protect `syncSecret` at rest (`enc:` + machine XOR) | F-004 / PR-02 | **DONE** |
+| LOG-1 | event_log prune max 2000 rows | PR-06 | **DONE** |
+| DB-1 | Clearer SQLite open error message | R8 | **DONE** |
+| TST-1 | Unique temp paths in DEM LZW unit test | F-006 | **DONE** |
 
-### 1.0.1-B — Field blockers
+### 1.0.1-B — Field blockers (ещё открыто)
 
 | Task | Fix | Failure |
 |------|-----|---------|
 | VID-1 | WebView2 / Windows camera permission path for MediaDevices | F-001 |
 | VID-2 | Document + optional FFmpeg dshow fallback when MD denied; privacy checklist | F-002 |
 | MAP-1 | Investigate MapLibre worker in packaged WebView2 | F-003 |
-| TST-1 | Unique temp paths in DEM LZW unit test | F-006 |
 
 ### 1.0.1-C — Lab (не код)
 

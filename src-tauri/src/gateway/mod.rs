@@ -48,6 +48,111 @@ pub struct GatewayStatus {
     pub message: String,
 }
 
+/// Obfuscate sync secret at rest (`enc:` + XOR with machine-local key). Not a HSM;
+/// prevents casual SQLite dumps from exposing the token (1.0.1 SEC-2).
+fn machine_key() -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let host = std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "aether-gs".into());
+    let mut hasher = Sha256::new();
+    hasher.update(b"ags-gateway-sync-v1|");
+    hasher.update(host.as_bytes());
+    let dig = hasher.finalize();
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&dig);
+    out
+}
+
+fn b64_encode(data: &[u8]) -> String {
+    const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = chunk.get(1).copied().unwrap_or(0) as u32;
+        let b2 = chunk.get(2).copied().unwrap_or(0) as u32;
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(T[((n >> 18) & 63) as usize] as char);
+        out.push(T[((n >> 12) & 63) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            T[((n >> 6) & 63) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            T[(n & 63) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+fn b64_decode(s: &str) -> Option<Vec<u8>> {
+    let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
+    let mut buf = Vec::with_capacity(s.len() * 3 / 4);
+    let mut bits: u32 = 0;
+    let mut nbits: i32 = 0;
+    for c in s.chars() {
+        let v = match c {
+            'A'..='Z' => (c as u8 - b'A') as u32,
+            'a'..='z' => (c as u8 - b'a' + 26) as u32,
+            '0'..='9' => (c as u8 - b'0' + 52) as u32,
+            '+' => 62,
+            '/' => 63,
+            '=' => break,
+            _ => return None,
+        };
+        bits = (bits << 6) | v;
+        nbits += 6;
+        if nbits >= 8 {
+            nbits -= 8;
+            buf.push((bits >> nbits) as u8);
+            bits &= (1 << nbits) - 1;
+        }
+    }
+    Some(buf)
+}
+
+fn seal_secret(plain: &str) -> String {
+    let plain = plain.trim();
+    if plain.is_empty() {
+        return String::new();
+    }
+    if plain.starts_with("enc:") {
+        return plain.to_string();
+    }
+    let key = machine_key();
+    let xored: Vec<u8> = plain
+        .as_bytes()
+        .iter()
+        .enumerate()
+        .map(|(i, b)| b ^ key[i % key.len()])
+        .collect();
+    format!("enc:{}", b64_encode(&xored))
+}
+
+fn open_secret(stored: &str) -> String {
+    let stored = stored.trim();
+    if stored.is_empty() {
+        return String::new();
+    }
+    let Some(rest) = stored.strip_prefix("enc:") else {
+        // Legacy plaintext — returned as-is; next save will seal.
+        return stored.to_string();
+    };
+    let Some(raw) = b64_decode(rest) else {
+        return String::new();
+    };
+    let key = machine_key();
+    let plain: Vec<u8> = raw
+        .iter()
+        .enumerate()
+        .map(|(i, b)| b ^ key[i % key.len()])
+        .collect();
+    String::from_utf8(plain).unwrap_or_default()
+}
+
 fn load_config(state: &State<'_, DbState>) -> GatewayConfig {
     with_conn(state, |conn| {
         let raw: Result<String, _> =
@@ -55,7 +160,11 @@ fn load_config(state: &State<'_, DbState>) -> GatewayConfig {
                 r.get(0)
             });
         Ok(match raw {
-            Ok(s) => serde_json::from_str(&s).unwrap_or_default(),
+            Ok(s) => {
+                let mut cfg: GatewayConfig = serde_json::from_str(&s).unwrap_or_default();
+                cfg.sync_secret = open_secret(&cfg.sync_secret);
+                cfg
+            }
             Err(_) => GatewayConfig::default(),
         })
     })
@@ -63,7 +172,9 @@ fn load_config(state: &State<'_, DbState>) -> GatewayConfig {
 }
 
 fn save_config(state: &State<'_, DbState>, cfg: &GatewayConfig) -> Result<(), String> {
-    let json = serde_json::to_string(cfg).map_err(|e| e.to_string())?;
+    let mut to_store = cfg.clone();
+    to_store.sync_secret = seal_secret(&cfg.sync_secret);
+    let json = serde_json::to_string(&to_store).map_err(|e| e.to_string())?;
     with_conn(state, |conn| {
         conn.execute(
             "INSERT INTO settings_kv(key, value) VALUES('gateway_config', ?1)
@@ -448,4 +559,23 @@ fn chrono_now() -> String {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs().to_string())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{open_secret, seal_secret};
+
+    #[test]
+    fn seal_open_roundtrip() {
+        let plain = "super-secret-token-42";
+        let sealed = seal_secret(plain);
+        assert!(sealed.starts_with("enc:"));
+        assert_ne!(sealed, plain);
+        assert_eq!(open_secret(&sealed), plain);
+    }
+
+    #[test]
+    fn legacy_plaintext_open() {
+        assert_eq!(open_secret("legacy"), "legacy");
+    }
 }

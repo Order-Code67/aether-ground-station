@@ -32,6 +32,8 @@ commands.allow = [
   "auth_login",
   "auth_bind_session",
   "auth_clear_session",
+  "auth_touch",
+  "auth_set_idle_timeout",
   "video_ffmpeg_status",
   "video_probe_rtsp",
   "video_rtsp_bridge_start",

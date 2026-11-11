@@ -16,9 +16,12 @@ interface AuthState {
   session: AuthSession | null;
   ready: boolean;
   users: AuthUser[];
+  idleTimeoutSecs: number;
   bootstrap: () => Promise<void>;
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
+  /** Touch backend session; returns false if expired. */
+  touchSession: () => Promise<boolean>;
   can: (perm: keyof (typeof ROLE_PERMISSIONS)["Administrator"]) => boolean;
   refreshUsers: () => Promise<void>;
 }
@@ -27,6 +30,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   ready: false,
   users: [],
+  idleTimeoutSecs: 45 * 60,
 
   bootstrap: async () => {
     await ensureDefaultAdmin();
@@ -49,6 +53,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           id: string;
           username: string;
           role: string;
+          idleTimeoutSecs?: number;
         }>("auth_login", { username, password });
         const user: AuthUser = {
           id: result.id,
@@ -62,7 +67,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         };
         const users = await dbListUsers();
         await dbAudit(user.id, "auth.login", { role: user.role });
-        set({ session, users });
+        set({
+          session,
+          users,
+          idleTimeoutSecs: result.idleTimeoutSecs ?? 45 * 60,
+        });
         eventBus.emit("info", "auth", `Вход: ${user.username} (${user.role})`);
         return true;
       } catch (e) {
@@ -109,6 +118,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       eventBus.emit("info", "auth", `Выход: ${session.user.username}`);
     }
     set({ session: null });
+  },
+
+  touchSession: async () => {
+    if (!isTauriRuntime()) return true;
+    if (!get().session) return false;
+    try {
+      const info = await invoke<{
+        authenticated: boolean;
+        expired: boolean;
+        idleTimeoutSecs?: number;
+      }>("auth_touch");
+      if (info.idleTimeoutSecs != null) {
+        set({ idleTimeoutSecs: info.idleTimeoutSecs });
+      }
+      if (!info.authenticated || info.expired) {
+        eventBus.emit("warning", "auth", "Сессия истекла — войдите снова");
+        get().logout();
+        return false;
+      }
+      return true;
+    } catch {
+      get().logout();
+      return false;
+    }
   },
 
   can: (perm) => {

@@ -34,6 +34,8 @@ pub fn run() {
             auth_session::auth_login,
             auth_session::auth_bind_session,
             auth_session::auth_clear_session,
+            auth_session::auth_touch,
+            auth_session::auth_set_idle_timeout,
             hardware::serial::serial_list_ports,
             hardware::serial::serial_open,
             hardware::serial::serial_close,
