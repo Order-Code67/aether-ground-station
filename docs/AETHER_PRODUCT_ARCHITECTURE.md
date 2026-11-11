@@ -9,9 +9,8 @@
 
 ## Вердикт
 
-Есть **каркас** универсальной наземной станции (8 разделов, CRUD комплексов/станций, карта, каталоги, hubs).  
-**Нет** ещё единой 4-pane Station Planner среды и полноценного GS-PT (3D / sync az↔карта↔рельеф).  
-Three.js **не** подключён.
+Есть каркас + **wave-2 Station Planner**: 4-pane layout (дерево \| карта \| карточка \| инженерия), GS-PT симуляция с 3D (Three.js), sync az↔карта↔look-at B, профиль рельефа по азимуту.  
+**Ограничения:** нет remote actuator commands; DEM mesh 3D рельефа ещё нет; coverage/RF heatmaps не фейкаются.
 
 ---
 
@@ -24,10 +23,10 @@ Three.js **не** подключён.
 | TopBar | Complex + Site selectors | Notifications feed |
 | StatusBar | Devices/video/tel/warnings/**last update** | Telemetry richer |
 | Complex/Site/Station | CRUD + filter | Org layer; docs/photos |
-| MapLibre | Markers, drag save, az line | Unified 4-pane; satellite layers |
+| MapLibre | 4-pane planner; markers; sim az + look-at B | Satellite layers polish |
 | Mast/Antenna | Catalogs + mounts | Full RF docs UI |
-| Terrain | A–B + CSV | Azimuth-coupled profile; 3D DEM mesh |
-| Pan-Tilt | Sim/Monitor shell | 3D model; map sync; configurable ranges |
+| Terrain | A–B + CSV + **azimuth-coupled** profile | 3D DEM mesh |
+| Pan-Tilt | Sim/Monitor + compass + **Three.js 3D** + map sync | Hardware adapter fact angles |
 | Devices hub | Tabs COM/USB/Net/HID | Connection history table |
 | Video | Panel + statuses | Multi-layout Video Center |
 | Telemetry | Normalize + history | Charts polish; adapters UI |
@@ -47,10 +46,10 @@ Three.js **не** подключён.
 
 ---
 
-## Следующие согласованные этапы (после GS-1 chrome)
+## Wave-2 (реализовано на feature-ветке)
 
-1. **GS-3 layout** — 4-pane Station Planner  
-2. **GS-PT** — pan-tilt visualization + map/terrain sync (Three.js только по OK)  
-3. **GS-5 coupling** — профиль по азимуту  
+1. **GS-3** — 4-pane Station Planner (`StationPlannerView`)  
+2. **GS-PT** — pan-tilt + Three.js + map sync (без команд на приводы)  
+3. **GS-5** — профиль A=станция → B=look-at по азимуту  
 
-Push / merge main / tag — только по явному согласованию.
+Далее: DEM mesh 3D, hardware pan-tilt adapter, push/merge — только по OK.

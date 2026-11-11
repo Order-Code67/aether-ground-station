@@ -16,23 +16,8 @@ import {
 } from "@/services/stations";
 import { useStationPlannerStore } from "@/stores/stationPlannerStore";
 import { useAuthStore } from "@/stores/authStore";
+import { bearingDeg, haversineM } from "@/utils/geo";
 import { OSM_STYLE, offlineStyle } from "./mapStyles";
-
-function haversineM(
-  a: { lng: number; lat: number },
-  b: { lng: number; lat: number },
-): number {
-  const R = 6371000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const lat1 = toRad(a.lat);
-  const lat2 = toRad(b.lat);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
-}
 
 interface UserMarker {
   id: string;
@@ -43,7 +28,7 @@ interface UserMarker {
 
 type TileMode = "osm" | "offline" | "local";
 
-export function MapPanel() {
+export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
   const markersRef = useRef<Marker[]>([]);
@@ -51,6 +36,7 @@ export function MapPanel() {
     a: { lng: number; lat: number };
     b?: { lng: number; lat: number };
   } | null>(null);
+  const lookAtMarkerRef = useRef<Marker | null>(null);
 
   const [terrain, setTerrain] = useState(false);
   const [markers, setMarkers] = useState<UserMarker[]>([]);
@@ -58,8 +44,16 @@ export function MapPanel() {
   const canManage = useAuthStore((s) => s.can("manageDevices"));
   const setActiveStationId = useStationPlannerStore((s) => s.setActiveStationId);
   const activeComplexId = useStationPlannerStore((s) => s.activeComplexId);
+  const activeStationId = useStationPlannerStore((s) => s.activeStationId);
+  const simAzimuthDeg = useStationPlannerStore((s) => s.simAzimuthDeg);
+  const lookAt = useStationPlannerStore((s) => s.lookAt);
+  const pickLookAt = useStationPlannerStore((s) => s.pickLookAt);
+  const setLookAt = useStationPlannerStore((s) => s.setLookAt);
+  const setPickLookAt = useStationPlannerStore((s) => s.setPickLookAt);
+  const setSimAzimuthDeg = useStationPlannerStore((s) => s.setSimAzimuthDeg);
+  const plannerStations = useStationPlannerStore((s) => s.stations);
+
   const [measureMode, setMeasureMode] = useState(false);
-  const [profilePick, setProfilePick] = useState(false);
   const [distanceM, setDistanceM] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tileMode, setTileMode] = useState<TileMode>("offline");
@@ -68,6 +62,8 @@ export function MapPanel() {
 
   const measureModeRef = useRef(measureMode);
   measureModeRef.current = measureMode;
+  const pickLookAtRef = useRef(pickLookAt);
+  pickLookAtRef.current = pickLookAt;
 
   const styleFor = (mode: TileMode, url: string) => {
     if (mode === "osm") return OSM_STYLE;
@@ -78,7 +74,6 @@ export function MapPanel() {
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     try {
-      // Prefer blob workers; MapLibre CSP worker is enabled via vite worker.es + CSP.
       const map = new Map({
         container: containerRef.current,
         style: styleFor(tileMode, localUrl),
@@ -95,6 +90,23 @@ export function MapPanel() {
         eventBus.emit("warning", "map", msg);
       });
       map.on("click", (e: MapMouseEvent) => {
+        if (pickLookAtRef.current) {
+          const state = useStationPlannerStore.getState();
+          const st = state.stations.find((s) => s.id === state.activeStationId);
+          setLookAt({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+          if (st) {
+            const brg = bearingDeg(
+              { lat: st.latitude, lng: st.longitude },
+              { lat: e.lngLat.lat, lng: e.lngLat.lng },
+            );
+            let signed = brg > 180 ? brg - 360 : brg;
+            const { azMin, azMax } = state.panTiltRanges;
+            signed = Math.min(azMax, Math.max(azMin, signed));
+            setSimAzimuthDeg(signed);
+          }
+          eventBus.emit("info", "map", "Точка наблюдения B задана");
+          return;
+        }
         if (!measureModeRef.current) return;
         const point = e.lngLat;
         if (!measureRef.current) {
@@ -105,7 +117,10 @@ export function MapPanel() {
         const a = measureRef.current.a;
         const b = { lng: point.lng, lat: point.lat };
         measureRef.current = { a, b };
-        const meters = haversineM(a, b);
+        const meters = haversineM(
+          { lat: a.lat, lng: a.lng },
+          { lat: b.lat, lng: b.lng },
+        );
         setDistanceM(meters);
         eventBus.emit(
           "info",
@@ -127,10 +142,11 @@ export function MapPanel() {
     return () => {
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
+      lookAtMarkerRef.current?.remove();
+      lookAtMarkerRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
     };
-    // init once; style switches via setStyle below
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -139,15 +155,6 @@ export function MapPanel() {
     if (!map) return;
     try {
       map.setStyle(styleFor(tileMode, localUrl));
-      eventBus.emit(
-        "info",
-        "map",
-        tileMode === "osm"
-          ? "Тайлы OSM (нужен интернет)"
-          : tileMode === "local"
-            ? "Локальные тайлы"
-            : "Офлайн-база",
-      );
     } catch (e) {
       eventBus.emit(
         "error",
@@ -162,6 +169,9 @@ export function MapPanel() {
       .then(setStations)
       .catch(() => setStations([]));
   }, [activeComplexId]);
+
+  // Prefer planner store stations when in planner (fresher selection sync).
+  const displayStations = plannerMode ? plannerStations : stations;
 
   useEffect(() => {
     const map = mapRef.current;
@@ -183,25 +193,32 @@ export function MapPanel() {
     const map = mapRef.current;
     if (!map) return;
     stationMarkersRef.current.forEach((m) => m.remove());
-    stationMarkersRef.current = stations.map((s) => {
+    stationMarkersRef.current = displayStations.map((s) => {
       const el = document.createElement("div");
-      el.className =
-        "h-3.5 w-3.5 rotate-45 border-2 border-ags-warning bg-ags-elevated shadow";
-      el.title = `${s.name} az=${s.azimuthDeg ?? "—"}`;
+      const active = s.id === activeStationId;
+      el.className = active
+        ? "h-4 w-4 rotate-45 border-2 border-ags-accent bg-ags-warning shadow"
+        : "h-3.5 w-3.5 rotate-45 border-2 border-ags-warning bg-ags-elevated shadow";
+      const azForMarker =
+        plannerMode && s.id === activeStationId
+          ? simAzimuthDeg
+          : (s.azimuthDeg ?? 0);
+      el.title = `${s.name} az=${azForMarker}`;
       el.addEventListener("click", (ev) => {
         ev.stopPropagation();
         setActiveStationId(s.id);
       });
-      const az = s.azimuthDeg ?? 0;
       const popup = new Popup().setHTML(
         `<strong>${s.name}</strong><br/>AMSL ant: ${
-          s.antennaCenterAmslM == null ? "N/A" : s.antennaCenterAmslM.toFixed(1) + " m"
-        }<br/>Az ${az == null ? "N/A" : az + "°"} (${s.azimuthRef ?? "true"})`,
+          s.antennaCenterAmslM == null
+            ? "N/A"
+            : s.antennaCenterAmslM.toFixed(1) + " m"
+        }<br/>Az ${azForMarker.toFixed(1)}°`,
       );
       const marker = new Marker({ element: el, draggable: canManage })
         .setLngLat([s.longitude, s.latitude])
         .setPopup(popup)
-        .setRotation(az)
+        .setRotation(azForMarker)
         .addTo(map);
       marker.on("dragend", () => {
         const ll = marker.getLngLat();
@@ -213,6 +230,7 @@ export function MapPanel() {
           setStations((prev) =>
             prev.map((x) => (x.id === saved.id ? saved : x)),
           );
+          void useStationPlannerStore.getState().refresh();
           eventBus.emit(
             "info",
             "map",
@@ -225,30 +243,52 @@ export function MapPanel() {
 
     const srcId = "ags-station-azimuth";
     const layerId = "ags-station-azimuth-line";
-    const features = stations
-      .filter((s) => s.azimuthDeg != null)
-      .map((s) => {
-        const az = ((s.azimuthDeg ?? 0) * Math.PI) / 180;
-        const lenDeg = 0.02; // ~2 km visual cue at mid-latitudes
-        const dest = {
-          lng: s.longitude + Math.sin(az) * lenDeg,
-          lat: s.latitude + Math.cos(az) * lenDeg,
-        };
-        return {
-          type: "Feature" as const,
-          properties: { id: s.id, name: s.name },
-          geometry: {
-            type: "LineString" as const,
-            coordinates: [
-              [s.longitude, s.latitude],
-              [dest.lng, dest.lat],
-            ],
-          },
-        };
+    const features = displayStations.map((s) => {
+      const useSim = plannerMode && s.id === activeStationId;
+      const azDeg = useSim ? simAzimuthDeg : (s.azimuthDeg ?? null);
+      if (azDeg == null && !useSim) return null;
+      const az = ((azDeg ?? 0) * Math.PI) / 180;
+      const lenDeg = 0.02;
+      const dest = {
+        lng: s.longitude + Math.sin(az) * lenDeg,
+        lat: s.latitude + Math.cos(az) * lenDeg,
+      };
+      return {
+        type: "Feature" as const,
+        properties: { id: s.id, name: s.name, sim: useSim },
+        geometry: {
+          type: "LineString" as const,
+          coordinates: [
+            [s.longitude, s.latitude],
+            [dest.lng, dest.lat],
+          ],
+        },
+      };
+    }).filter(Boolean);
+
+    // Look-at line A→B for active station
+    const active = displayStations.find((s) => s.id === activeStationId);
+    if (plannerMode && active && lookAt) {
+      features.push({
+        type: "Feature" as const,
+        properties: { id: "lookat", name: "B", sim: true },
+        geometry: {
+          type: "LineString" as const,
+          coordinates: [
+            [active.longitude, active.latitude],
+            [lookAt.lng, lookAt.lat],
+          ],
+        },
       });
+    }
+
     const data = {
       type: "FeatureCollection" as const,
-      features,
+      features: features as {
+        type: "Feature";
+        properties: Record<string, unknown>;
+        geometry: { type: "LineString"; coordinates: number[][] };
+      }[],
     };
     const apply = () => {
       if (!map.getSource(srcId)) {
@@ -258,8 +298,8 @@ export function MapPanel() {
           type: "line",
           source: srcId,
           paint: {
-            "line-color": "#e8a838",
-            "line-width": 2,
+            "line-color": "#3d8bfd",
+            "line-width": 2.5,
             "line-dasharray": [2, 1],
           },
         });
@@ -271,7 +311,28 @@ export function MapPanel() {
     };
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
-  }, [stations, canManage, setActiveStationId]);
+
+    // Look-at marker
+    lookAtMarkerRef.current?.remove();
+    lookAtMarkerRef.current = null;
+    if (plannerMode && lookAt) {
+      const el = document.createElement("div");
+      el.className =
+        "flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-ags-accent text-[8px] font-bold text-white shadow";
+      el.textContent = "B";
+      lookAtMarkerRef.current = new Marker({ element: el })
+        .setLngLat([lookAt.lng, lookAt.lat])
+        .addTo(map);
+    }
+  }, [
+    displayStations,
+    canManage,
+    setActiveStationId,
+    activeStationId,
+    simAzimuthDeg,
+    lookAt,
+    plannerMode,
+  ]);
 
   const addMarkerHere = () => {
     const map = mapRef.current;
@@ -330,20 +391,19 @@ export function MapPanel() {
         >
           {measureMode ? "Завершить измерение" : "Измерить расстояние"}
         </button>
-        <button
-          type="button"
-          className="rounded border border-ags-border px-2 py-1"
-          onClick={() => {
-            setProfilePick((v) => !v);
-            eventBus.emit(
-              "info",
-              "map",
-              "Профиль рельефа: точки A–B задаются в панели Рельеф",
-            );
-          }}
-        >
-          {profilePick ? "Профиль: см. Рельеф" : "Профиль A–B"}
-        </button>
+        {plannerMode && (
+          <button
+            type="button"
+            className={
+              pickLookAt
+                ? "rounded bg-ags-accent px-2 py-1 text-white"
+                : "rounded border border-ags-border px-2 py-1"
+            }
+            onClick={() => setPickLookAt(!pickLookAt)}
+          >
+            {pickLookAt ? "Клик: точка B…" : "Точка наблюдения B"}
+          </button>
+        )}
         <button
           type="button"
           className="rounded border border-ags-border px-2 py-1"

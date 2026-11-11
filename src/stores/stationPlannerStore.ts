@@ -8,6 +8,24 @@ import {
   upsertSite,
 } from "@/services/complexes";
 import { listStations, upsertStation } from "@/services/stations";
+import { clampAngle, destinationPoint } from "@/utils/geo";
+
+export type PanTiltMode = "simulation" | "monitoring" | "local-status";
+
+export interface PanTiltRanges {
+  azMin: number;
+  azMax: number;
+  elMin: number;
+  elMax: number;
+}
+
+export interface LookAtPoint {
+  lat: number;
+  lng: number;
+}
+
+/** Default look-at distance along azimuth when B not picked (m). */
+export const DEFAULT_LOOK_AT_M = 2500;
 
 interface PlannerState {
   complexes: Complex[];
@@ -18,6 +36,22 @@ interface PlannerState {
   activeStationId: string | null;
   loading: boolean;
   error: string | null;
+
+  /** Pan-tilt simulation / monitoring coordinator (UI SSOT for angles). */
+  panTiltMode: PanTiltMode;
+  simAzimuthDeg: number;
+  simElevationDeg: number;
+  /** Fact angles from adapter — null = Н/Д */
+  factAzimuthDeg: number | null;
+  factElevationDeg: number | null;
+  panTiltRanges: PanTiltRanges;
+  lookAt: LookAtPoint | null;
+  /** When true, next map click sets look-at B. */
+  pickLookAt: boolean;
+  treeCollapsed: boolean;
+  cardCollapsed: boolean;
+  engineeringCollapsed: boolean;
+
   refresh: () => Promise<void>;
   setActiveComplexId: (id: string | null) => void;
   setActiveSiteId: (id: string | null) => void;
@@ -25,7 +59,27 @@ interface PlannerState {
   saveComplex: (c: Complex) => Promise<void>;
   saveSite: (s: Site) => Promise<void>;
   saveStation: (s: Station) => Promise<void>;
+
+  setPanTiltMode: (mode: PanTiltMode) => void;
+  setSimAzimuthDeg: (deg: number) => void;
+  setSimElevationDeg: (deg: number) => void;
+  resetSimZero: () => void;
+  setPanTiltRanges: (r: Partial<PanTiltRanges>) => void;
+  setLookAt: (p: LookAtPoint | null) => void;
+  setPickLookAt: (v: boolean) => void;
+  /** Rebuild look-at B from active station + sim azimuth (keeps distance). */
+  syncLookAtFromAzimuth: () => void;
+  setTreeCollapsed: (v: boolean) => void;
+  setCardCollapsed: (v: boolean) => void;
+  setEngineeringCollapsed: (v: boolean) => void;
 }
+
+const DEFAULT_RANGES: PanTiltRanges = {
+  azMin: -120,
+  azMax: 120,
+  elMin: 0,
+  elMax: 90,
+};
 
 export const useStationPlannerStore = create<PlannerState>((set, get) => ({
   complexes: [],
@@ -36,6 +90,18 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
   activeStationId: null,
   loading: false,
   error: null,
+
+  panTiltMode: "simulation",
+  simAzimuthDeg: 0,
+  simElevationDeg: 0,
+  factAzimuthDeg: null,
+  factElevationDeg: null,
+  panTiltRanges: { ...DEFAULT_RANGES },
+  lookAt: null,
+  pickLookAt: false,
+  treeCollapsed: false,
+  cardCollapsed: false,
+  engineeringCollapsed: false,
 
   refresh: async () => {
     set({ loading: true, error: null });
@@ -66,7 +132,31 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
     void get().refresh();
   },
 
-  setActiveStationId: (id) => set({ activeStationId: id }),
+  setActiveStationId: (id) => {
+    const st = get().stations.find((s) => s.id === id);
+    set({ activeStationId: id });
+    if (st?.azimuthDeg != null) {
+      const { azMin, azMax } = get().panTiltRanges;
+      set({ simAzimuthDeg: clampAngle(st.azimuthDeg, azMin, azMax) });
+    }
+    if (st?.elevationDeg != null) {
+      const { elMin, elMax } = get().panTiltRanges;
+      set({ simElevationDeg: clampAngle(st.elevationDeg, elMin, elMax) });
+    }
+    // Seed look-at along azimuth when station selected and no B yet.
+    if (st && !get().lookAt) {
+      const az = get().simAzimuthDeg;
+      const b = destinationPoint(
+        st.latitude,
+        st.longitude,
+        az,
+        DEFAULT_LOOK_AT_M,
+      );
+      set({ lookAt: b });
+    } else if (st) {
+      get().syncLookAtFromAzimuth();
+    }
+  },
 
   saveComplex: async (c) => {
     await upsertComplex(c);
@@ -82,4 +172,79 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
     await upsertStation(s);
     await get().refresh();
   },
+
+  setPanTiltMode: (mode) => {
+    if (mode === "monitoring" || mode === "local-status") {
+      set({
+        panTiltMode: mode,
+        factAzimuthDeg: null,
+        factElevationDeg: null,
+      });
+      return;
+    }
+    set({ panTiltMode: mode });
+  },
+
+  setSimAzimuthDeg: (deg) => {
+    const { azMin, azMax } = get().panTiltRanges;
+    set({ simAzimuthDeg: clampAngle(deg, azMin, azMax) });
+    get().syncLookAtFromAzimuth();
+  },
+
+  setSimElevationDeg: (deg) => {
+    const { elMin, elMax } = get().panTiltRanges;
+    set({ simElevationDeg: clampAngle(deg, elMin, elMax) });
+  },
+
+  resetSimZero: () => {
+    set({ simAzimuthDeg: 0, simElevationDeg: 0 });
+    get().syncLookAtFromAzimuth();
+  },
+
+  setPanTiltRanges: (r) => {
+    const next = { ...get().panTiltRanges, ...r };
+    set({
+      panTiltRanges: next,
+      simAzimuthDeg: clampAngle(get().simAzimuthDeg, next.azMin, next.azMax),
+      simElevationDeg: clampAngle(
+        get().simElevationDeg,
+        next.elMin,
+        next.elMax,
+      ),
+    });
+  },
+
+  setLookAt: (p) => set({ lookAt: p, pickLookAt: false }),
+
+  setPickLookAt: (v) => set({ pickLookAt: v }),
+
+  syncLookAtFromAzimuth: () => {
+    const { activeStationId, stations, simAzimuthDeg, lookAt } = get();
+    const st = stations.find((s) => s.id === activeStationId);
+    if (!st) return;
+    const dist =
+      lookAt != null
+        ? Math.max(
+            50,
+            Math.hypot(
+              // approximate meters via degree delta — prefer previous haversine via lookAt distance
+              (lookAt.lat - st.latitude) * 111_320,
+              (lookAt.lng - st.longitude) *
+                111_320 *
+                Math.cos((st.latitude * Math.PI) / 180),
+            ),
+          )
+        : DEFAULT_LOOK_AT_M;
+    const b = destinationPoint(
+      st.latitude,
+      st.longitude,
+      simAzimuthDeg,
+      dist,
+    );
+    set({ lookAt: b });
+  },
+
+  setTreeCollapsed: (v) => set({ treeCollapsed: v }),
+  setCardCollapsed: (v) => set({ cardCollapsed: v }),
+  setEngineeringCollapsed: (v) => set({ engineeringCollapsed: v }),
 }));
