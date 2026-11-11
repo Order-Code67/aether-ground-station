@@ -1,14 +1,10 @@
 /**
- * Download dark basemap tiles into public/tiles for offline MapLibre.
- * Source: Esri World Dark Gray Base (no API key; free for bundling offline).
- * Note: Carto basemaps.cartocdn.com now returns "API KEY REQUIRED" watermarks.
+ * Download detailed offline basemap into public/tiles for slippy map.
+ * Source: Esri World Imagery (satellite) — free ArcGIS Online tiles, no API key.
  *
- * Coverage:
- *  - World overview z0–z4
- *  - Central Russia (incl. Smolensk Oblast) z5–z11
- *  - Smolensk Oblast detail z12
+ * Esri path order: {z}/{y}/{x}. Stored locally as {z}/{x}/{y}.jpg
  *
- * Esri tile path is {z}/{y}/{x}; we store locally as {z}/{x}/{y}.png|.jpg
+ * Coverage: world z0–4, Central Russia z5–11, Smolensk z12.
  *
  * Usage: node scripts/fetch-offline-tiles.mjs
  */
@@ -18,6 +14,9 @@ import {
   mkdirSync,
   unlinkSync,
   writeFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -26,9 +25,8 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(ROOT, "public", "tiles");
-/** Esri uses z/y/x order. */
 const TEMPLATE =
-  "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}";
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 
 const CENTRAL_RUSSIA = {
   west: 30.5,
@@ -44,8 +42,7 @@ const SMOLENSK_OBLAST = {
   north: 56.05,
 };
 
-/** Tiny watermark / placeholder tiles from previous Carto fetch (~2513 B). */
-const MIN_VALID_BYTES = 4000;
+const MIN_VALID_BYTES = 5000;
 
 function lon2tile(lon, z) {
   return Math.floor(((lon + 180) / 360) * 2 ** z);
@@ -62,25 +59,21 @@ function destPath(z, x, y, ext = "jpg") {
 }
 
 async function fetchTile(z, x, y, retries = 4) {
-  // Prefer jpg (Esri), keep png path for MapLibre template flexibility
   const jpg = destPath(z, x, y, "jpg");
   const png = destPath(z, x, y, "png");
   for (const p of [jpg, png]) {
     if (existsSync(p)) {
-      const { size } = await import("node:fs").then((fs) => fs.statSync(p));
-      if (size >= MIN_VALID_BYTES) return "skip";
+      if (statSync(p).size >= MIN_VALID_BYTES) return "skip";
       unlinkSync(p);
     }
   }
   mkdirSync(dirname(jpg), { recursive: true });
-  const url = TEMPLATE.replace("{z}", z)
-    .replace("{y}", y)
-    .replace("{x}", x);
+  const url = TEMPLATE.replace("{z}", z).replace("{y}", y).replace("{x}", x);
   let lastErr;
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       const res = await fetch(url, {
-        headers: { "User-Agent": "AetherGroundStation/1.0 (offline bundle)" },
+        headers: { "User-Agent": "AetherGroundStation/1.0 (offline imagery)" },
       });
       if (!res.ok) throw new Error(`${res.status} ${url}`);
       const ctype = res.headers.get("content-type") || "";
@@ -157,27 +150,19 @@ const jobs = [
   ...bboxZooms(CENTRAL_RUSSIA, 5, 11),
   ...bboxZooms(SMOLENSK_OBLAST, 12, 12),
 ];
-
 const key = (t) => `${t.z}/${t.x}/${t.y}`;
 const uniq = [...new Map(jobs.map((t) => [key(t), t])).values()];
 console.log(
-  `Esri Dark Gray · Central Russia + Smolensk: ${uniq.length} tiles → public/tiles`,
+  `Esri World Imagery · Central Russia + Smolensk: ${uniq.length} tiles → public/tiles`,
 );
 
-// Wipe known-bad Carto watermark PNGs (identical ~2513 B)
-console.log("Removing invalid watermark tiles (<4KB)…");
-{
-  const { readdirSync, statSync } = await import("node:fs");
-  function walk(dir) {
-    for (const name of readdirSync(dir, { withFileTypes: true })) {
-      const p = join(dir, name.name);
-      if (name.isDirectory()) walk(p);
-      else if (/\.(png|jpg|jpeg)$/i.test(name.name)) {
-        if (statSync(p).size < MIN_VALID_BYTES) unlinkSync(p);
-      }
-    }
-  }
-  if (existsSync(OUT)) walk(OUT);
+mkdirSync(OUT, { recursive: true });
+console.log("Clearing previous basemap tiles…");
+for (const name of readdirSync(OUT, { withFileTypes: true })) {
+  if (name.name === "manifest.json") continue;
+  const p = join(OUT, name.name);
+  if (name.isDirectory()) rmSync(p, { recursive: true, force: true });
+  else unlinkSync(p);
 }
 
 const result = await downloadSet(uniq);
@@ -190,9 +175,12 @@ writeFileSync(
   join(OUT, "manifest.json"),
   JSON.stringify(
     {
-      source: "Esri World Dark Gray Base",
+      source: "Esri World Imagery",
       templateLocal: "/tiles/{z}/{x}/{y}.jpg",
-      coverage: { centralRussia: CENTRAL_RUSSIA, smolenskOblast: SMOLENSK_OBLAST },
+      coverage: {
+        centralRussia: CENTRAL_RUSSIA,
+        smolenskOblast: SMOLENSK_OBLAST,
+      },
       tileCount: uniq.length,
       fetchedAt: new Date().toISOString(),
     },
@@ -200,3 +188,4 @@ writeFileSync(
     2,
   ),
 );
+console.log("Wrote public/tiles/manifest.json");

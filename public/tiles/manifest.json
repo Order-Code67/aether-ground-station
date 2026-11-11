@@ -1,5 +1,5 @@
 {
-  "source": "Esri World Dark Gray Base",
+  "source": "Esri World Imagery",
   "templateLocal": "/tiles/{z}/{x}/{y}.jpg",
   "coverage": {
     "centralRussia": {
@@ -16,5 +16,5 @@
     }
   },
   "tileCount": 9636,
-  "fetchedAt": "2026-11-11T21:09:27.219Z"
+  "fetchedAt": "2026-11-11T22:06:04.259Z"
 }

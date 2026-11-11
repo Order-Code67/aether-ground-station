@@ -10,13 +10,19 @@ import { useAuthStore } from "@/stores/authStore";
 import { bearingDeg, haversineM } from "@/utils/geo";
 import {
   absoluteAssetUrl,
+  BUNDLED_DEM_MAX_ZOOM,
+  BUNDLED_DEM_MIN_ZOOM,
+  BUNDLED_DEM_TILES,
   BUNDLED_OFFLINE_TILES,
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
 } from "./mapStyles";
+import { HillshadeTile } from "./HillshadeTile";
 import {
   destinationByAzimuth,
   lonLatToWorldPx,
+  tile2lat,
+  tile2lon,
   worldPxToLonLat,
 } from "./slippyMath";
 
@@ -90,7 +96,8 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const [distanceM, setDistanceM] = useState<number | null>(null);
   const [tileMode, setTileMode] = useState<TileMode>("offline");
   const [localUrl, setLocalUrl] = useState(BUNDLED_OFFLINE_TILES);
-  const [terrainHint, setTerrainHint] = useState(false);
+  /** Relief hillshade from Terrarium DEM — on by default. */
+  const [reliefOn, setReliefOn] = useState(true);
 
   const measureModeRef = useRef(measureMode);
   measureModeRef.current = measureMode;
@@ -138,7 +145,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           res.ok ? "info" : "warning",
           "map",
           res.ok
-            ? "Карта включена · офлайн-тайл Смоленска OK"
+            ? "Карта: спутник Esri Imagery · Смоленск OK"
             : `Офлайн-тайл недоступен (${res.status})`,
         );
       } catch (e) {
@@ -151,7 +158,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         );
       }
     })();
-    eventBus.emit("info", "map", "Карта: автозапуск (офлайн XYZ)");
+    eventBus.emit("info", "map", "Карта: автозапуск · спутник + рельеф");
     return () => {
       cancelled = true;
     };
@@ -197,8 +204,14 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     const x1 = Math.floor((left + size.w) / TILE) + 1;
     const y1 = Math.floor((top + size.h) / TILE) + 1;
     const n = 2 ** zoom;
-    const out: { key: string; x: number; y: number; left: number; top: number; url: string }[] =
-      [];
+    const out: {
+      key: string;
+      x: number;
+      y: number;
+      left: number;
+      top: number;
+      url: string;
+    }[] = [];
     for (let x = x0; x <= x1; x++) {
       for (let y = y0; y <= y1; y++) {
         if (y < 0 || y >= n) continue;
@@ -219,6 +232,56 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     }
     return out;
   }, [center.lat, center.lon, size.h, size.w, tileTpl, zoom]);
+
+  /** DEM tiles for hillshade (clamp to bundled Terrarium zooms). */
+  const demTiles = useMemo(() => {
+    if (!reliefOn || size.w <= 0 || size.h <= 0) return [];
+    const demZ = Math.min(
+      BUNDLED_DEM_MAX_ZOOM,
+      Math.max(BUNDLED_DEM_MIN_ZOOM, zoom),
+    );
+    const c = lonLatToWorldPx(center.lon, center.lat, demZ, TILE);
+    const left = c.x - size.w / 2 / 2 ** Math.max(0, zoom - demZ);
+    const top = c.y - size.h / 2 / 2 ** Math.max(0, zoom - demZ);
+    const span = Math.max(size.w, size.h) / 2 ** Math.max(0, zoom - demZ);
+    const x0 = Math.floor(left / TILE) - 1;
+    const y0 = Math.floor(top / TILE) - 1;
+    const x1 = Math.floor((left + span) / TILE) + 1;
+    const y1 = Math.floor((top + span) / TILE) + 1;
+    const n = 2 ** demZ;
+    const out: {
+      key: string;
+      left: number;
+      top: number;
+      size: number;
+      url: string;
+    }[] = [];
+    const screenC = lonLatToWorldPx(center.lon, center.lat, zoom, TILE);
+    for (let x = x0; x <= x1; x++) {
+      for (let y = y0; y <= y1; y++) {
+        if (y < 0 || y >= n) continue;
+        const tx = ((x % n) + n) % n;
+        const url = absoluteAssetUrl(BUNDLED_DEM_TILES)
+          .replace("{z}", String(demZ))
+          .replace("{x}", String(tx))
+          .replace("{y}", String(y));
+        const lon0 = tile2lon(x, demZ);
+        const lat0 = tile2lat(y, demZ);
+        const lon1 = tile2lon(x + 1, demZ);
+        const lat1 = tile2lat(y + 1, demZ);
+        const p0 = lonLatToWorldPx(lon0, lat0, zoom, TILE);
+        const p1 = lonLatToWorldPx(lon1, lat1, zoom, TILE);
+        out.push({
+          key: `dem-${demZ}/${tx}/${y}`,
+          left: p0.x - (screenC.x - size.w / 2),
+          top: p0.y - (screenC.y - size.h / 2),
+          size: Math.max(1, Math.abs(p1.x - p0.x)),
+          url,
+        });
+      }
+    }
+    return out;
+  }, [center.lat, center.lon, reliefOn, size.h, size.w, zoom]);
 
   const movedRef = useRef(false);
 
@@ -361,6 +424,16 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
               width: TILE,
               height: TILE,
             }}
+          />
+        ))}
+
+        {demTiles.map((t) => (
+          <HillshadeTile
+            key={t.key}
+            demUrl={t.url}
+            left={t.left}
+            top={t.top}
+            size={t.size}
           />
         ))}
 
@@ -527,17 +600,19 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         )}
         <button
           type="button"
-          className={toolBtn(terrainHint)}
+          className={toolBtn(reliefOn)}
           onClick={() => {
-            setTerrainHint((v) => !v);
+            setReliefOn((v) => !v);
             eventBus.emit(
               "info",
               "map",
-              "3D рельеф: панель «Инженерия» → Рельеф (Terrarium DEM)",
+              reliefOn
+                ? "Рельеф (hillshade) выкл"
+                : "Рельеф: Terrarium hillshade поверх спутника",
             );
           }}
         >
-          3D рельеф
+          Рельеф
         </button>
         {distanceM != null && (
           <span className="px-1.5 font-mono text-ags-fg">

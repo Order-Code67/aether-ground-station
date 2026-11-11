@@ -6,8 +6,8 @@
 ## Offline (встроенные тайлы) — по умолчанию
 
 - Стиль `offlineStyle()` → `/tiles/{z}/{x}/{y}.png` из `public/tiles`.
-- Тёмная база (Esri World Dark Gray — без API key), без интернета.
-  (Carto basemaps.cartocdn.com больше не подходит: отдает watermark «API KEY REQUIRED».)
+- База: **Esri World Imagery** (спутник) + слой рельефа Terrarium hillshade.
+  (Carto / Dark Gray не используются — слишком пустые или требуют API key.)
 - Покрытия:
   - мир z0–z4;
   - Центральная Россия (вкл. Смоленскую обл.) z5–z11: ≈30.5–42°E, 51–58.5°N;

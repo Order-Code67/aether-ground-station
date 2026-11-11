@@ -13,11 +13,12 @@ export function absoluteAssetUrl(pathOrTemplate: string): string {
   return `${origin}${path}`;
 }
 
-/** Bundled offline dark tiles (public/tiles) — Esri World Dark Gray, no network. */
+/** Bundled offline satellite tiles (public/tiles) — Esri World Imagery. */
 export const BUNDLED_OFFLINE_TILES = "/tiles/{z}/{x}/{y}.jpg";
 
-/** Bundled Terrarium DEM (public/dem-tiles) for MapLibre 3D terrain. */
+/** Bundled Terrarium DEM (public/dem-tiles) for relief / hillshade overlay. */
 export const BUNDLED_DEM_TILES = "/dem-tiles/{z}/{x}/{y}.png";
+export const BUNDLED_DEM_MIN_ZOOM = 5;
 export const BUNDLED_DEM_MAX_ZOOM = 11;
 
 /** Default map center — Смоленск (областной центр). */
@@ -63,7 +64,7 @@ export function offlineStyle(
           type: "raster",
           tiles: [template],
           tileSize: 256,
-          attribution: "Aether offline · Esri Dark Gray · Центральная Россия",
+          attribution: "Aether offline · Esri World Imagery · Центральная Россия",
           maxzoom: 12,
           scheme: "xyz",
         },
