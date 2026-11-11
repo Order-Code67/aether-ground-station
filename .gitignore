@@ -46,3 +46,7 @@ test-results/
 playwright-report/
 blob-report/
 services/gateway-server/sync-ingest.jsonl
+
+# Large optional DEM (re-fetch: npm run dem:fetch:copernicus)
+vendor/dem-copernicus/*.tif
+

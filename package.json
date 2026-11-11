@@ -1,7 +1,7 @@
 {
   "name": "aether-ground-station",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Aether Ground Station — modular desktop platform for ground hardware complexes",
   "type": "module",
   "scripts": {
@@ -18,6 +18,8 @@
     "ffmpeg:fetch": "powershell -ExecutionPolicy Bypass -File scripts/fetch-ffmpeg.ps1",
     "ffmpeg:check": "node scripts/check-ffmpeg-bundle.mjs",
     "tiles:fetch": "node scripts/fetch-offline-tiles.mjs",
+    "dem:fetch": "node scripts/fetch-dem-tiles.mjs",
+    "dem:fetch:copernicus": "node scripts/fetch-copernicus-dem.mjs",
     "pretauri:build": "node scripts/check-ffmpeg-bundle.mjs",
     "gateway:stub": "npm --prefix services/gateway-server start",
     "gateway:certs": "node scripts/gen-gateway-certs.mjs",

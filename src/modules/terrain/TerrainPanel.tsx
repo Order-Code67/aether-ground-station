@@ -27,10 +27,10 @@ export function TerrainPanel({
   const [manualElev, setManualElev] = useState("");
   const [geotiffPath, setGeotiffPath] = useState("");
   const [note, setNote] = useState<string | null>(null);
-  const [startLat, setStartLat] = useState("55.75");
-  const [startLng, setStartLng] = useState("37.62");
-  const [endLat, setEndLat] = useState("55.80");
-  const [endLng, setEndLng] = useState("37.70");
+  const [startLat, setStartLat] = useState("54.782");
+  const [startLng, setStartLng] = useState("32.045");
+  const [endLat, setEndLat] = useState("54.85");
+  const [endLng, setEndLng] = useState("32.20");
 
   const stations = useStationPlannerStore((s) => s.stations);
   const activeStationId = useStationPlannerStore((s) => s.activeStationId);
@@ -135,6 +135,11 @@ export function TerrainPanel({
       { missing, total: pts.length },
     );
   };
+
+  useEffect(() => {
+    const id = window.setInterval(() => setMeta(getDemMeta()), 1500);
+    return () => window.clearInterval(id);
+  }, []);
 
   // GS-5: auto-couple A=station, B=look-at when azimuth / lookAt change.
   useEffect(() => {

@@ -28,10 +28,31 @@ npm run tiles:fetch
 
 Требует сеть (`tile.openstreetmap.org`). CSP разрешает только этот хост для online-режима.
 
+## 3D рельеф (Terrarium DEM)
+
+Бесплатный офлайн DEM (Mapzen Terrarium / AWS `elevation-tiles-prod`):
+
+- Тайлы: `public/dem-tiles/{z}/{x}/{y}.png`
+- Центральная Россия z5–z10, Смоленская область z11
+- Кнопка **3D рельеф** на карте → pitch + hillshade (MapLibre `raster-dem`)
+- Сэмплер высот: `createTerrariumTileAdapter` (авто при старте)
+
+```bash
+npm run dem:fetch
+```
+
+Опционально Copernicus GLO-90 COG (AWS Open Data) → `vendor/dem-copernicus/`
+(не входит в установщик; для локального GeoTIFF / анализа):
+
+```bash
+npm run dem:fetch:copernicus
+```
+
 ## Smoke
 
 - [ ] Offline: карта с растром без network errors
+- [ ] 3D рельеф вкл → pitch ~58°, холмы Смоленска видны
 - [ ] Станции + azimuth line
 - [ ] OSM (optional) при наличии сети
 
-Код: `src/modules/map/mapStyles.ts`, `MapPanel.tsx`, `scripts/fetch-offline-tiles.mjs`.
+Код: `src/modules/map/mapStyles.ts`, `MapPanel.tsx`, `scripts/fetch-offline-tiles.mjs`, `scripts/fetch-dem-tiles.mjs`.

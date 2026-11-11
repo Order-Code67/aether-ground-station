@@ -17,7 +17,15 @@ import {
 import { useStationPlannerStore } from "@/stores/stationPlannerStore";
 import { useAuthStore } from "@/stores/authStore";
 import { bearingDeg, haversineM } from "@/utils/geo";
-import { BUNDLED_OFFLINE_TILES, OSM_STYLE, offlineStyle } from "./mapStyles";
+import {
+  BUNDLED_DEM_MAX_ZOOM,
+  BUNDLED_DEM_TILES,
+  BUNDLED_OFFLINE_TILES,
+  DEFAULT_MAP_CENTER,
+  DEFAULT_MAP_ZOOM,
+  OSM_STYLE,
+  offlineStyle,
+} from "./mapStyles";
 
 interface UserMarker {
   id: string;
@@ -77,10 +85,12 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
       const map = new Map({
         container: containerRef.current,
         style: styleFor(tileMode, localUrl),
-        center: [37.62, 55.75],
-        zoom: 10,
+        center: DEFAULT_MAP_CENTER,
+        zoom: DEFAULT_MAP_ZOOM,
+        maxPitch: 85,
+        pitchWithRotate: true,
       });
-      map.addControl(new NavigationControl(), "top-right");
+      map.addControl(new NavigationControl({ visualizePitch: true }), "top-right");
       map.addControl(new ScaleControl({ unit: "metric" }));
       map.on("error", (e) => {
         const msg =
@@ -163,6 +173,60 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
       );
     }
   }, [tileMode, localUrl]);
+
+  /** Offline Terrarium DEM → MapLibre 3D pitch + hillshade. */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const apply = () => {
+      try {
+        if (terrain) {
+          if (!map.getSource("dem")) {
+            map.addSource("dem", {
+              type: "raster-dem",
+              tiles: [BUNDLED_DEM_TILES],
+              tileSize: 256,
+              encoding: "terrarium",
+              maxzoom: BUNDLED_DEM_MAX_ZOOM,
+              attribution: "Mapzen Terrarium · Смоленск / ЦФО",
+            });
+          }
+          if (!map.getLayer("hillshade")) {
+            map.addLayer({
+              id: "hillshade",
+              type: "hillshade",
+              source: "dem",
+              paint: {
+                "hillshade-exaggeration": 0.45,
+                "hillshade-shadow-color": "#060a10",
+                "hillshade-highlight-color": "#c8d2de",
+                "hillshade-illumination-direction": 315,
+              },
+            });
+          }
+          map.setTerrain({ source: "dem", exaggeration: 1.35 });
+          map.easeTo({ pitch: 58, bearing: map.getBearing(), duration: 700 });
+        } else {
+          map.setTerrain(null);
+          if (map.getLayer("hillshade")) map.removeLayer("hillshade");
+          if (map.getSource("dem")) map.removeSource("dem");
+          map.easeTo({ pitch: 0, duration: 450 });
+        }
+      } catch (e) {
+        eventBus.emit(
+          "warning",
+          "map",
+          e instanceof Error
+            ? e.message
+            : "Не удалось включить 3D рельеф (нет DEM тайлов?)",
+        );
+      }
+    };
+
+    if (map.isStyleLoaded()) apply();
+    else map.once("idle", apply);
+  }, [terrain, tileMode, localUrl]);
 
   useEffect(() => {
     void listStations({ complexId: activeComplexId })
@@ -406,19 +470,23 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         )}
         <button
           type="button"
-          className="rounded border border-ags-border px-2 py-1"
+          className={
+            terrain
+              ? "rounded bg-ags-accent px-2 py-1 text-white"
+              : "rounded border border-ags-border px-2 py-1"
+          }
           onClick={() => {
             setTerrain((v) => !v);
             eventBus.emit(
               "info",
               "map",
               terrain
-                ? "Слой рельефа скрыт"
-                : "Рельеф требует DEM tileset",
+                ? "3D рельеф выкл"
+                : "3D рельеф: Terrarium DEM (Смоленск / Центральная Россия)",
             );
           }}
         >
-          Рельеф {terrain ? "вкл" : "выкл"}
+          3D рельеф {terrain ? "вкл" : "выкл"}
         </button>
         {distanceM != null && (
           <span className="text-ags-muted">
