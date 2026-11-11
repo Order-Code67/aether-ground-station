@@ -1,5 +1,18 @@
 import type { StyleSpecification } from "maplibre-gl";
 
+/** Absolute same-origin URL (required for Tauri asset / custom protocol). */
+export function absoluteAssetUrl(pathOrTemplate: string): string {
+  const raw = pathOrTemplate.trim();
+  if (!raw) return raw;
+  if (/^https?:\/\//i.test(raw) || raw.startsWith("blob:")) return raw;
+  const origin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "";
+  const path = raw.startsWith("/") ? raw : `/${raw}`;
+  return `${origin}${path}`;
+}
+
 /** Bundled offline dark tiles (public/tiles) — Esri World Dark Gray, no network. */
 export const BUNDLED_OFFLINE_TILES = "/tiles/{z}/{x}/{y}.jpg";
 
@@ -39,7 +52,9 @@ export const OSM_STYLE: StyleSpecification = {
 export function offlineStyle(
   localTileUrlTemplate?: string,
 ): StyleSpecification {
-  const template = (localTileUrlTemplate ?? BUNDLED_OFFLINE_TILES).trim();
+  const template = absoluteAssetUrl(
+    (localTileUrlTemplate ?? BUNDLED_OFFLINE_TILES).trim(),
+  );
   if (template) {
     return {
       version: 8,

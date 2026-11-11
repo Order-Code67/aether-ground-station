@@ -19,6 +19,7 @@ import { useStationPlannerStore } from "@/stores/stationPlannerStore";
 import { useAuthStore } from "@/stores/authStore";
 import { bearingDeg, haversineM } from "@/utils/geo";
 import {
+  absoluteAssetUrl,
   BUNDLED_DEM_MAX_ZOOM,
   BUNDLED_DEM_TILES,
   BUNDLED_OFFLINE_TILES,
@@ -82,17 +83,60 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
+    const host = containerRef.current;
+    let ro: ResizeObserver | null = null;
     try {
       const map = new Map({
-        container: containerRef.current,
+        container: host,
         style: styleFor(tileMode, localUrl),
         center: DEFAULT_MAP_CENTER,
         zoom: DEFAULT_MAP_ZOOM,
         maxPitch: 85,
         pitchWithRotate: true,
+        fadeDuration: 0,
+        transformRequest: (url) => {
+          if (url.startsWith("/") && typeof window !== "undefined") {
+            return { url: `${window.location.origin}${url}` };
+          }
+          return { url };
+        },
       });
       map.addControl(new NavigationControl({ visualizePitch: true }), "top-right");
       map.addControl(new ScaleControl({ unit: "metric" }));
+
+      ro = new ResizeObserver(() => {
+        try {
+          map.resize();
+        } catch {
+          /* map removed */
+        }
+      });
+      ro.observe(host);
+      map.once("load", () => {
+        map.resize();
+        void (async () => {
+          try {
+            const probe = absoluteAssetUrl("/tiles/10/603/324.jpg");
+            const res = await fetch(probe);
+            eventBus.emit(
+              res.ok ? "info" : "warning",
+              "map",
+              res.ok
+                ? "Офлайн-тайл Смоленска загружен"
+                : `Офлайн-тайл недоступен (${res.status})`,
+            );
+          } catch (err) {
+            eventBus.emit(
+              "warning",
+              "map",
+              err instanceof Error
+                ? `Тайл-проверка: ${err.message}`
+                : "Тайл-проверка не удалась",
+            );
+          }
+        })();
+      });
+
       map.on("error", (e) => {
         const msg =
           e.error instanceof Error
@@ -151,6 +195,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
       setError(e instanceof Error ? e.message : "Ошибка инициализации карты");
     }
     return () => {
+      ro?.disconnect();
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
       lookAtMarkerRef.current?.remove();
@@ -186,7 +231,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           if (!map.getSource("dem")) {
             map.addSource("dem", {
               type: "raster-dem",
-              tiles: [BUNDLED_DEM_TILES],
+              tiles: [absoluteAssetUrl(BUNDLED_DEM_TILES)],
               tileSize: 256,
               encoding: "terrarium",
               maxzoom: BUNDLED_DEM_MAX_ZOOM,

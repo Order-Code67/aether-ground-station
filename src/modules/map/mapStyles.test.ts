@@ -5,8 +5,8 @@ describe("map offline / XYZ styles", () => {
   it("default offline uses bundled local tiles (no CDN)", () => {
     const s = offlineStyle();
     const src = s.sources?.local as { tiles?: string[] } | undefined;
-    expect(src?.tiles?.[0]).toBe(BUNDLED_OFFLINE_TILES);
-    expect(src?.tiles?.[0]).not.toMatch(/^https?:\/\//);
+    expect(src?.tiles?.[0]).toContain(BUNDLED_OFFLINE_TILES);
+    expect(src?.tiles?.[0]).not.toMatch(/^https?:\/\/(?!localhost)/);
     expect(s.layers?.some((l) => l.type === "background")).toBe(true);
   });
 

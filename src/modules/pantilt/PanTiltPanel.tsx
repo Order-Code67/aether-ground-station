@@ -162,18 +162,23 @@ export function PanTiltPanel({ compact = false }: { compact?: boolean }) {
             </div>
           </label>
           <label className="block text-xs text-ags-muted">
-            Угол места ({ranges.elMin}…{ranges.elMax}°)
-            <div className="mt-1 flex items-center gap-2">
-              <input
-                type="range"
-                min={ranges.elMin}
-                max={ranges.elMax}
-                step={0.5}
-                value={el}
-                onChange={(e) => setEl(Number(e.target.value))}
-                className="min-w-0 flex-1"
-                aria-label="Угол места"
-              />
+            Угол места ({ranges.elMin}…{ranges.elMax}°) — вверх поднимает
+            <div className="mt-1 flex items-end gap-3">
+              <div className="flex h-28 flex-col items-center gap-1">
+                <span className="text-[9px] text-ags-dim">{ranges.elMax}°</span>
+                <input
+                  type="range"
+                  min={ranges.elMin}
+                  max={ranges.elMax}
+                  step={0.5}
+                  value={el}
+                  onChange={(e) => setEl(Number(e.target.value))}
+                  className="ags-el-slider"
+                  aria-label="Угол места"
+                  aria-valuetext={`${el} градусов вверх`}
+                />
+                <span className="text-[9px] text-ags-dim">{ranges.elMin}°</span>
+              </div>
               <input
                 type="number"
                 className="w-16 rounded border border-ags-border bg-ags-elevated px-1 py-0.5 font-mono"

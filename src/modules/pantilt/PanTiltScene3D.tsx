@@ -167,8 +167,8 @@ export function PanTiltScene3D({
     if (!api) return;
     // Azimuth: Yaw around mast (compass: 0 = north = -Z in our model).
     api.platform.rotation.y = THREE.MathUtils.degToRad(-azimuthDeg);
-    // Elevation: pitch of boom (0 = horizon, + = up).
-    api.boom.rotation.x = THREE.MathUtils.degToRad(-elevationDeg);
+    // Elevation: boom along −Z; +rotation.x tips toward +Y (up). Slider up = raise.
+    api.boom.rotation.x = THREE.MathUtils.degToRad(elevationDeg);
   }, [azimuthDeg, elevationDeg]);
 
   const setCamera = (preset: "front" | "side" | "top" | "persp") => {
