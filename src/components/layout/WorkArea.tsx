@@ -7,6 +7,12 @@ import { SectionSubNav } from "./SectionSubNav";
 const HomeView = lazy(() =>
   import("@/modules/home").then((m) => ({ default: m.HomeView })),
 );
+const ComplexesView = lazy(() =>
+  import("@/modules/complexes").then((m) => ({ default: m.ComplexesView })),
+);
+const CatalogsView = lazy(() =>
+  import("@/modules/catalogs").then((m) => ({ default: m.CatalogsView })),
+);
 const WorkspaceView = lazy(() =>
   import("@/modules/workspace").then((m) => ({ default: m.WorkspaceView })),
 );
@@ -46,6 +52,9 @@ const TelemetryView = lazy(() =>
 const ArchiveView = lazy(() =>
   import("@/modules/archive").then((m) => ({ default: m.ArchiveView })),
 );
+const EventsView = lazy(() =>
+  import("@/modules/events").then((m) => ({ default: m.EventsView })),
+);
 const InventoryView = lazy(() =>
   import("@/modules/inventory").then((m) => ({ default: m.InventoryView })),
 );
@@ -76,6 +85,8 @@ const SettingsView = lazy(() =>
 
 const VIEWS: Record<ModuleId, ComponentType> = {
   home: HomeView,
+  complexes: ComplexesView,
+  catalogs: CatalogsView,
   workspace: WorkspaceView,
   video: VideoView,
   walksnail: WalksnailView,
@@ -89,6 +100,7 @@ const VIEWS: Record<ModuleId, ComponentType> = {
   serial: SerialView,
   telemetry: TelemetryView,
   archive: ArchiveView,
+  events: EventsView,
   inventory: InventoryView,
   reports: ReportsView,
   plugins: PluginsView,

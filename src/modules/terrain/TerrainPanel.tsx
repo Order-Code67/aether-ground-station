@@ -19,6 +19,10 @@ export function TerrainPanel() {
   const [manualElev, setManualElev] = useState("");
   const [geotiffPath, setGeotiffPath] = useState("");
   const [note, setNote] = useState<string | null>(null);
+  const [startLat, setStartLat] = useState("55.75");
+  const [startLng, setStartLng] = useState("37.62");
+  const [endLat, setEndLat] = useState("55.80");
+  const [endLng, setEndLng] = useState("37.70");
 
   const inspectGeoTiff = async () => {
     if (!geotiffPath.trim()) return;
@@ -66,19 +70,21 @@ export function TerrainPanel() {
   };
 
   const runProfile = async () => {
-    const stations = await listStations();
-    const a = stations[0];
-    if (!a) {
-      setNote("Нет станций — создайте в Station Planner");
+    const sLat = Number(startLat);
+    const sLng = Number(startLng);
+    const eLat = Number(endLat);
+    const eLng = Number(endLng);
+    if ([sLat, sLng, eLat, eLng].some((n) => Number.isNaN(n))) {
+      setNote("Координаты A–B некорректны");
       return;
     }
-    const endLat = a.latitude + 0.05;
-    const endLng = a.longitude + 0.05;
+    const stations = await listStations();
+    const a = stations[0];
     const points = new Map<string, number>();
     if (manualElev.trim() !== "") {
       const v = Number(manualElev);
       if (!Number.isNaN(v)) {
-        points.set(`${a.latitude.toFixed(5)},${a.longitude.toFixed(5)}`, v);
+        points.set(`${sLat.toFixed(5)},${sLng.toFixed(5)}`, v);
         setTerrainAdapter(createManualElevationAdapter(points), {
           id: "manual",
           name: "Ручная отметка оператора",
@@ -89,20 +95,20 @@ export function TerrainPanel() {
     }
     const adapter = getTerrainAdapter();
     const pts = await buildLinearProfile({
-      startLat: a.latitude,
-      startLng: a.longitude,
-      endLat,
-      endLng,
+      startLat: sLat,
+      startLng: sLng,
+      endLat: eLat,
+      endLng: eLng,
       steps: 24,
-      antennaCenterAmslM: a.antennaCenterAmslM ?? null,
+      antennaCenterAmslM: a?.antennaCenterAmslM ?? null,
       sample: (lat, lng) => adapter.sample(lat, lng),
     });
     setProfile(pts);
     const missing = pts.filter((p) => p.missing).length;
     setNote(
       missing === pts.length
-        ? "Все точки без DEM — N/A (не подставляем высоты)"
-        : `Профиль: ${pts.length - missing}/${pts.length} с данными`,
+        ? "Все точки без DEM — N/A (не подставляем высоты). Геометрия ≠ радиосвязь."
+        : `Профиль: ${pts.length - missing}/${pts.length} с данными · источник ${meta.name}`,
     );
     emitDomain(
       "TerrainDataLoaded",
@@ -110,6 +116,24 @@ export function TerrainPanel() {
       `Профиль: missing=${missing}/${pts.length}`,
       { missing, total: pts.length },
     );
+  };
+
+  const exportCsv = () => {
+    if (!profile.length) return;
+    const lines = [
+      "distance_m,surface_elevation_m,antenna_center_amsl_m,missing,source",
+      ...profile.map(
+        (p) =>
+          `${p.distanceM},${p.surfaceElevationM ?? ""},${p.antennaCenterAmslM ?? ""},${p.missing},${meta.name}`,
+      ),
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `terrain-profile-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const w = 320;
@@ -143,8 +167,42 @@ export function TerrainPanel() {
         >
           Inspect GeoTIFF
         </button>
+      </div>
+      <div className="flex flex-wrap gap-2 text-xs">
+        <label className="flex items-center gap-1">
+          A lat
+          <input
+            className="w-24 rounded border border-ags-border bg-ags-elevated px-1 py-0.5 font-mono"
+            value={startLat}
+            onChange={(e) => setStartLat(e.target.value)}
+          />
+        </label>
+        <label className="flex items-center gap-1">
+          A lng
+          <input
+            className="w-24 rounded border border-ags-border bg-ags-elevated px-1 py-0.5 font-mono"
+            value={startLng}
+            onChange={(e) => setStartLng(e.target.value)}
+          />
+        </label>
+        <label className="flex items-center gap-1">
+          B lat
+          <input
+            className="w-24 rounded border border-ags-border bg-ags-elevated px-1 py-0.5 font-mono"
+            value={endLat}
+            onChange={(e) => setEndLat(e.target.value)}
+          />
+        </label>
+        <label className="flex items-center gap-1">
+          B lng
+          <input
+            className="w-24 rounded border border-ags-border bg-ags-elevated px-1 py-0.5 font-mono"
+            value={endLng}
+            onChange={(e) => setEndLng(e.target.value)}
+          />
+        </label>
         <input
-          className="w-32 rounded border border-ags-border bg-ags-elevated px-2 py-1 font-mono text-xs"
+          className="w-28 rounded border border-ags-border bg-ags-elevated px-2 py-1 font-mono"
           placeholder="Ручная AMSL"
           value={manualElev}
           onChange={(e) => setManualElev(e.target.value)}
@@ -155,6 +213,14 @@ export function TerrainPanel() {
           onClick={() => void runProfile()}
         >
           Построить профиль
+        </button>
+        <button
+          type="button"
+          className="rounded border border-ags-border px-2 py-1"
+          disabled={!profile.length}
+          onClick={exportCsv}
+        >
+          Экспорт CSV
         </button>
       </div>
       {note && <p className="text-xs text-ags-warning">{note}</p>}

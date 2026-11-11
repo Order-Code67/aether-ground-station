@@ -25,12 +25,12 @@ export const NAV_SECTIONS: readonly NavSectionDef[] = [
   {
     id: "complexes",
     label: "Комплексы",
-    tabs: ["profiles", "stations", "inventory"],
+    tabs: ["complexes", "stations", "inventory", "profiles"],
   },
   {
     id: "planning",
     label: "Карта и планирование",
-    tabs: ["map", "stations", "terrain", "pantilt"],
+    tabs: ["map", "stations", "catalogs", "terrain", "pantilt"],
   },
   {
     id: "video",
@@ -51,7 +51,7 @@ export const NAV_SECTIONS: readonly NavSectionDef[] = [
   {
     id: "events",
     label: "События",
-    tabs: ["archive", "reports"],
+    tabs: ["events", "archive", "reports"],
   },
   {
     id: "settings",
@@ -63,15 +63,18 @@ export const NAV_SECTIONS: readonly NavSectionDef[] = [
 
 const MODULE_TO_SECTION: Partial<Record<ModuleId, NavSectionId>> = {
   home: "home",
+  complexes: "complexes",
   profiles: "complexes",
   stations: "complexes",
   inventory: "complexes",
   map: "planning",
+  catalogs: "planning",
   terrain: "planning",
   pantilt: "planning",
   video: "video",
   walksnail: "video",
-  archive: "events",
+  archive: "video",
+  events: "events",
   telemetry: "telemetry",
   aerial: "telemetry",
   devices: "equipment",
@@ -90,7 +93,6 @@ const MODULE_TO_SECTION: Partial<Record<ModuleId, NavSectionId>> = {
 /** Prefer planning when module appears in multiple sections (stations). */
 const MODULE_SECTION_OVERRIDE: Partial<Record<ModuleId, NavSectionId>> = {
   stations: "planning",
-  archive: "video",
 };
 
 export function sectionForModule(moduleId: ModuleId): NavSectionId {

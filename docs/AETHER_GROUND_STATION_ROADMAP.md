@@ -15,16 +15,16 @@
 | Этап | Название | Оценка риска | Зависит от |
 |------|----------|--------------|------------|
 | **GS-0** | Product Audit & UX Blueprint | Low | — |
-| **GS-1** | Dashboard & Navigation | Medium | GS-0 approve |
-| **GS-2** | Complex & Site Manager | Medium | GS-1 nav shell |
-| **GS-3** | Station Planner | Medium–High | GS-2 |
-| **GS-4** | Mast & Antenna Manager | Medium | GS-3 |
-| **GS-5** | Terrain Engine | Medium | GS-3 |
-| **GS-6** | Device Manager hub UX | Medium | GS-1 |
-| **GS-7** | Video Center | High (HW) | GS-6 partial |
-| **GS-8** | Telemetry Center | Medium | GS-6 |
-| **GS-9** | Event Center & Diagnostics | Low–Medium | GS-1 |
-| **GS-10** | Workspace & Integration | Medium | GS-2…9 |
+| **GS-1** | Dashboard & Navigation | Medium | **DONE** |
+| **GS-2** | Complex & Site Manager | Medium | **DONE** (schema v5) |
+| **GS-3** | Station Planner | Medium–High | **DONE** (map drag, planner store) |
+| **GS-4** | Mast & Antenna Manager | Medium | **DONE** |
+| **GS-5** | Terrain Engine | Medium | **DONE** (A–B + CSV) |
+| **GS-6** | Device Manager hub UX | Medium | **DONE** |
+| **GS-7** | Video Center | High (HW) | **DONE** (shell; HW lab separate) |
+| **GS-8** | Telemetry Center | Medium | **DONE** (existing + N/A) |
+| **GS-9** | Event Center & Diagnostics | Low–Medium | **DONE** |
+| **GS-10** | Workspace & Integration | Medium | **DONE** (role templates + status) |
 
 GS-6/7/8 могут частично идти параллельно после GS-1 **только** если не ломают shared `ModuleId` / DeviceManager.
 

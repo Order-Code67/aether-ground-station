@@ -26,6 +26,19 @@ export async function dbAppendEvent(event: {
   await call("db_append_event", event);
 }
 
+export async function dbListEvents(limit = 200): Promise<
+  Array<{
+    id: string;
+    at: string;
+    severity: string;
+    source: string;
+    message: string;
+  }>
+> {
+  if (!isTauriRuntime()) return [];
+  return call("db_list_events", { limit });
+}
+
 export async function dbBackup(): Promise<string | null> {
   if (!isTauriRuntime()) return null;
   return call<string>("db_backup");

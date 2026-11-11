@@ -1,6 +1,8 @@
 /** Идентификаторы модулей платформы (V2 + GS-1 home). */
 export type ModuleId =
   | "home"
+  | "complexes"
+  | "catalogs"
   | "workspace"
   | "video"
   | "walksnail"
@@ -14,6 +16,7 @@ export type ModuleId =
   | "serial"
   | "telemetry"
   | "archive"
+  | "events"
   | "inventory"
   | "reports"
   | "plugins"
@@ -37,6 +40,18 @@ export const MODULES: readonly ModuleDefinition[] = [
     label: "Главная",
     stage: 1,
     description: "Dashboard сводки комплекса",
+  },
+  {
+    id: "complexes",
+    label: "Комплексы",
+    stage: 2,
+    description: "Complex & Site Manager",
+  },
+  {
+    id: "catalogs",
+    label: "Мачты и антенны",
+    stage: 4,
+    description: "Mast & Antenna catalogs",
   },
   {
     id: "workspace",
@@ -115,6 +130,12 @@ export const MODULES: readonly ModuleDefinition[] = [
     label: "Архив",
     stage: 8,
     description: "Записи и журналы",
+  },
+  {
+    id: "events",
+    label: "Журнал событий",
+    stage: 9,
+    description: "Event Center",
   },
   {
     id: "inventory",

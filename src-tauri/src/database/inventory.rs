@@ -17,6 +17,16 @@ pub struct EquipmentRow {
     pub inventory_number: Option<String>,
     pub status: Option<String>,
     pub location: Option<String>,
+    #[serde(default)]
+    pub station_id: Option<String>,
+    #[serde(default)]
+    pub complex_id: Option<String>,
+    #[serde(default)]
+    pub site_id: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub installed_at: Option<String>,
     pub payload: String,
     pub updated_at: String,
 }
@@ -39,7 +49,8 @@ pub fn inventory_list(state: State<'_, DbState>) -> Result<Vec<EquipmentRow>, St
         let mut stmt = conn
             .prepare(
                 "SELECT id, name, manufacturer, model, serial_number, inventory_number,
-                        status, location, payload, updated_at
+                        status, location, payload, updated_at,
+                        station_id, complex_id, site_id, category, installed_at
                  FROM equipment_inventory ORDER BY name",
             )
             .map_err(|e| e.to_string())?;
@@ -56,6 +67,11 @@ pub fn inventory_list(state: State<'_, DbState>) -> Result<Vec<EquipmentRow>, St
                     location: row.get(7)?,
                     payload: row.get(8)?,
                     updated_at: row.get(9)?,
+                    station_id: row.get(10).ok(),
+                    complex_id: row.get(11).ok(),
+                    site_id: row.get(12).ok(),
+                    category: row.get(13).ok(),
+                    installed_at: row.get(14).ok(),
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -83,13 +99,16 @@ pub fn inventory_upsert(
         conn.execute(
             "INSERT INTO equipment_inventory(
                 id, name, manufacturer, model, serial_number, inventory_number,
-                status, location, payload, updated_at
-             ) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)
+                status, location, payload, updated_at,
+                station_id, complex_id, site_id, category, installed_at
+             ) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)
              ON CONFLICT(id) DO UPDATE SET
                 name=excluded.name, manufacturer=excluded.manufacturer, model=excluded.model,
                 serial_number=excluded.serial_number, inventory_number=excluded.inventory_number,
                 status=excluded.status, location=excluded.location, payload=excluded.payload,
-                updated_at=excluded.updated_at",
+                updated_at=excluded.updated_at, station_id=excluded.station_id,
+                complex_id=excluded.complex_id, site_id=excluded.site_id,
+                category=excluded.category, installed_at=excluded.installed_at",
             params![
                 item.id,
                 item.name,
@@ -101,6 +120,11 @@ pub fn inventory_upsert(
                 item.location,
                 item.payload,
                 item.updated_at,
+                item.station_id,
+                item.complex_id,
+                item.site_id,
+                item.category,
+                item.installed_at,
             ],
         )
         .map_err(|e| e.to_string())?;

@@ -9,7 +9,13 @@ import {
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { eventBus } from "@/services/events/eventBus";
-import { listStations, type Station } from "@/services/stations";
+import {
+  listStations,
+  upsertStation,
+  type Station,
+} from "@/services/stations";
+import { useStationPlannerStore } from "@/stores/stationPlannerStore";
+import { useAuthStore } from "@/stores/authStore";
 import { OSM_STYLE, offlineStyle } from "./mapStyles";
 
 function haversineM(
@@ -49,7 +55,11 @@ export function MapPanel() {
   const [terrain, setTerrain] = useState(false);
   const [markers, setMarkers] = useState<UserMarker[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
+  const canManage = useAuthStore((s) => s.can("manageDevices"));
+  const setActiveStationId = useStationPlannerStore((s) => s.setActiveStationId);
+  const activeComplexId = useStationPlannerStore((s) => s.activeComplexId);
   const [measureMode, setMeasureMode] = useState(false);
+  const [profilePick, setProfilePick] = useState(false);
   const [distanceM, setDistanceM] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tileMode, setTileMode] = useState<TileMode>("offline");
@@ -148,10 +158,10 @@ export function MapPanel() {
   }, [tileMode, localUrl]);
 
   useEffect(() => {
-    void listStations()
+    void listStations({ complexId: activeComplexId })
       .then(setStations)
       .catch(() => setStations([]));
-  }, []);
+  }, [activeComplexId]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -178,17 +188,39 @@ export function MapPanel() {
       el.className =
         "h-3.5 w-3.5 rotate-45 border-2 border-ags-warning bg-ags-elevated shadow";
       el.title = `${s.name} az=${s.azimuthDeg ?? "—"}`;
+      el.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        setActiveStationId(s.id);
+      });
       const az = s.azimuthDeg ?? 0;
       const popup = new Popup().setHTML(
         `<strong>${s.name}</strong><br/>AMSL ant: ${
           s.antennaCenterAmslM == null ? "N/A" : s.antennaCenterAmslM.toFixed(1) + " m"
-        }<br/>Az ${az}° (${s.azimuthRef ?? "true"})`,
+        }<br/>Az ${az == null ? "N/A" : az + "°"} (${s.azimuthRef ?? "true"})`,
       );
-      return new Marker({ element: el })
+      const marker = new Marker({ element: el, draggable: canManage })
         .setLngLat([s.longitude, s.latitude])
         .setPopup(popup)
         .setRotation(az)
         .addTo(map);
+      marker.on("dragend", () => {
+        const ll = marker.getLngLat();
+        void upsertStation({
+          ...s,
+          latitude: ll.lat,
+          longitude: ll.lng,
+        }).then((saved) => {
+          setStations((prev) =>
+            prev.map((x) => (x.id === saved.id ? saved : x)),
+          );
+          eventBus.emit(
+            "info",
+            "map",
+            `Станция ${saved.name}: координаты сохранены`,
+          );
+        });
+      });
+      return marker;
     });
 
     const srcId = "ags-station-azimuth";
@@ -239,7 +271,7 @@ export function MapPanel() {
     };
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
-  }, [stations]);
+  }, [stations, canManage, setActiveStationId]);
 
   const addMarkerHere = () => {
     const map = mapRef.current;
@@ -297,6 +329,20 @@ export function MapPanel() {
           onClick={() => setMeasureMode((v) => !v)}
         >
           {measureMode ? "Завершить измерение" : "Измерить расстояние"}
+        </button>
+        <button
+          type="button"
+          className="rounded border border-ags-border px-2 py-1"
+          onClick={() => {
+            setProfilePick((v) => !v);
+            eventBus.emit(
+              "info",
+              "map",
+              "Профиль рельефа: точки A–B задаются в панели Рельеф",
+            );
+          }}
+        >
+          {profilePick ? "Профиль: см. Рельеф" : "Профиль A–B"}
         </button>
         <button
           type="button"
