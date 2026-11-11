@@ -25,8 +25,8 @@
 | Complex/Site/Station | CRUD + filter | Org layer; docs/photos |
 | MapLibre | 4-pane planner; markers; sim az + look-at B | Satellite layers polish |
 | Mast/Antenna | Catalogs + mounts | Full RF docs UI |
-| Terrain | A–B + CSV + **azimuth-coupled** profile | 3D DEM mesh |
-| Pan-Tilt | Sim/Monitor + compass + **Three.js 3D** + map sync | Hardware adapter fact angles |
+| Terrain | A–B + CSV + az-coupled + **3D DEM mesh** (N/A without DEM) | denser mesh / worker |
+| Pan-Tilt | Sim/Monitor + 3D + map sync + **adapter contract** (fact=Н/Д) | Real COM/USB angle stream |
 | Devices hub | Tabs COM/USB/Net/HID | Connection history table |
 | Video | Panel + statuses | Multi-layout Video Center |
 | Telemetry | Normalize + history | Charts polish; adapters UI |
@@ -52,4 +52,4 @@
 2. **GS-PT** — pan-tilt + Three.js + map sync (без команд на приводы)  
 3. **GS-5** — профиль A=станция → B=look-at по азимуту  
 
-Далее: DEM mesh 3D, hardware pan-tilt adapter, push/merge — только по OK.
+Далее: реальный COM/USB angle stream; merge main — только по OK.

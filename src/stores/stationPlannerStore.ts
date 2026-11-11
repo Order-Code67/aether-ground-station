@@ -65,6 +65,10 @@ interface PlannerState {
   setSimElevationDeg: (deg: number) => void;
   resetSimZero: () => void;
   setPanTiltRanges: (r: Partial<PanTiltRanges>) => void;
+  setFactAngles: (
+    az: number | null,
+    el: number | null,
+  ) => void;
   setLookAt: (p: LookAtPoint | null) => void;
   setPickLookAt: (v: boolean) => void;
   /** Rebuild look-at B from active station + sim azimuth (keeps distance). */
@@ -213,6 +217,9 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
       ),
     });
   },
+
+  setFactAngles: (az, el) =>
+    set({ factAzimuthDeg: az, factElevationDeg: el }),
 
   setLookAt: (p) => set({ lookAt: p, pickLookAt: false }),
 

@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
 import {
   useStationPlannerStore,
   type PanTiltMode,
 } from "@/stores/stationPlannerStore";
+import { getPanTiltAdapter } from "@/services/pantilt/panTiltAdapter";
 import { PanTiltScene3D } from "./PanTiltScene3D";
 
 export type { PanTiltMode };
@@ -51,9 +53,32 @@ export function PanTiltPanel({ compact = false }: { compact?: boolean }) {
   const ranges = useStationPlannerStore((s) => s.panTiltRanges);
   const factAz = useStationPlannerStore((s) => s.factAzimuthDeg);
   const factEl = useStationPlannerStore((s) => s.factElevationDeg);
+  const setFactAngles = useStationPlannerStore((s) => s.setFactAngles);
   const stations = useStationPlannerStore((s) => s.stations);
   const activeStationId = useStationPlannerStore((s) => s.activeStationId);
   const st = stations.find((s) => s.id === activeStationId);
+  const [adapterMsg, setAdapterMsg] = useState<string | null>(null);
+
+  // Monitoring / local-status: poll adapter — never invent fact angles.
+  useEffect(() => {
+    if (mode !== "monitoring" && mode !== "local-status") {
+      setAdapterMsg(null);
+      return;
+    }
+    let alive = true;
+    const poll = async () => {
+      const sample = await getPanTiltAdapter().read();
+      if (!alive) return;
+      setFactAngles(sample.azimuthDeg, sample.elevationDeg);
+      setAdapterMsg(sample.message);
+    };
+    void poll();
+    const t = window.setInterval(() => void poll(), 2000);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+    };
+  }, [mode, setFactAngles]);
 
   const displayAz = mode === "simulation" ? az : factAz;
   const displayEl = mode === "simulation" ? el : factEl;
@@ -171,17 +196,10 @@ export function PanTiltPanel({ compact = false }: { compact?: boolean }) {
         </div>
       )}
 
-      {mode === "monitoring" && (
+      {(mode === "monitoring" || mode === "local-status") && (
         <p className="text-xs text-ags-dim">
-          Нет подключённого адаптера поворотного механизма — фактические углы
-          Н/Д. Отображается только симуляция для геометрии.
-        </p>
-      )}
-
-      {mode === "local-status" && (
-        <p className="text-xs text-ags-dim">
-          Ожидается локальный адаптер (COM/USB). Команды поворота на железо из
-          этого режима не отправляются.
+          {adapterMsg ??
+            "Чтение адаптера… Команды на приводы не отправляются."}
         </p>
       )}
 
