@@ -125,17 +125,31 @@ export function WorkArea() {
     );
   }
 
+  const mapLike =
+    activeModule === "map" ||
+    activeModule === "stations" ||
+    activeModule === "terrain" ||
+    activeModule === "pantilt";
+
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-ags-bg">
       <SectionSubNav />
-      <main className="min-h-0 min-w-0 flex-1 overflow-auto">
+      <main
+        className={
+          mapLike
+            ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+            : "min-h-0 min-w-0 flex-1 overflow-auto"
+        }
+      >
         <ModuleErrorBoundary name={def.label}>
           <Suspense
             fallback={
               <div className="p-6 text-sm text-ags-muted">Загрузка модуля…</div>
             }
           >
-            <View />
+            <div className={mapLike ? "min-h-0 flex-1" : "contents"}>
+              <View />
+            </div>
           </Suspense>
         </ModuleErrorBoundary>
       </main>

@@ -22,10 +22,10 @@ export function StationPlannerView() {
 
   return (
     <div
-      className="relative flex h-full min-h-0 flex-col bg-ags-bg"
+      className="relative flex h-full min-h-0 w-full flex-col bg-ags-bg"
       data-testid="station-planner"
     >
-      <div className="relative min-h-0 flex-1">
+      <div className="relative min-h-0 w-full flex-1">
         <MapPanel plannerMode />
 
         {/* Left glass: object tree */}
