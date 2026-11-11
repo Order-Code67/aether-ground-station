@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuthStore } from "@/stores/authStore";
-import { useProfileStore } from "@/stores/profileStore";
 import { useEventLogStore } from "@/stores/eventLogStore";
 import { useNavigationStore } from "@/stores/navigationStore";
+import { useStationPlannerStore } from "@/stores/stationPlannerStore";
 import { deviceManager } from "@/services/devices/deviceManager";
-import { listStations } from "@/services/stations";
 import { dbInit, dbGetSetting } from "@/services/database";
 import { getDiskSpace, formatBytes } from "@/services/system/diskSpace";
 import { isTauriRuntime } from "@/services/tauri";
@@ -17,6 +16,7 @@ import {
   type EntityStatusId,
 } from "@/types";
 import { getGatewayStatus } from "@/services/gateway";
+import { listTelemetryRecords } from "@/services/inventory";
 
 function Widget({
   title,
@@ -26,7 +26,7 @@ function Widget({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-ags-border bg-ags-panel p-4 text-sm">
+    <section className="rounded-lg border border-ags-border/80 bg-ags-panel p-4 text-sm shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
       <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ags-dim">
         {title}
       </h2>
@@ -37,14 +37,18 @@ function Widget({
 
 export function DashboardView() {
   const role = useAuthStore((s) => s.session?.user.role) ?? "Observer";
-  const profiles = useProfileStore((s) => s.profiles);
-  const activeProfileId = useProfileStore((s) => s.activeProfileId);
   const events = useEventLogStore((s) => s.events);
   const navigateToModule = useNavigationStore((s) => s.navigateToModule);
   const setSection = useNavigationStore((s) => s.setSection);
 
+  const complexes = useStationPlannerStore((s) => s.complexes);
+  const sites = useStationPlannerStore((s) => s.sites);
+  const stations = useStationPlannerStore((s) => s.stations);
+  const activeComplexId = useStationPlannerStore((s) => s.activeComplexId);
+  const activeSiteId = useStationPlannerStore((s) => s.activeSiteId);
+  const refresh = useStationPlannerStore((s) => s.refresh);
+
   const [devices, setDevices] = useState<DeviceCard[]>([]);
-  const [stationCount, setStationCount] = useState<number | null>(null);
   const [schemaVersion, setSchemaVersion] = useState<number | null>(null);
   const [dbPath, setDbPath] = useState<string | null>(null);
   const [disk, setDisk] = useState<{ available: string; path: string } | null>(
@@ -52,17 +56,17 @@ export function DashboardView() {
   );
   const [lastBackup, setLastBackup] = useState<string | null>(null);
   const [gatewayOn, setGatewayOn] = useState<boolean | null>(null);
+  const [telLast, setTelLast] = useState<string | null>(null);
 
-  const activeProfile = profiles.find((p) => p.id === activeProfileId);
+  const complex = complexes.find((c) => c.id === activeComplexId);
+  const site = sites.find((s) => s.id === activeSiteId);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   useEffect(() => {
     return deviceManager.subscribe(setDevices);
-  }, []);
-
-  useEffect(() => {
-    void listStations()
-      .then((s) => setStationCount(s.length))
-      .catch(() => setStationCount(null));
   }, []);
 
   useEffect(() => {
@@ -73,6 +77,7 @@ export function DashboardView() {
         setDisk(null);
         setLastBackup(null);
         setGatewayOn(null);
+        setTelLast(null);
         return;
       }
       try {
@@ -94,8 +99,7 @@ export function DashboardView() {
           : null,
       );
       try {
-        const bak = await dbGetSetting("last_backup_path");
-        setLastBackup(bak);
+        setLastBackup(await dbGetSetting("last_backup_path"));
       } catch {
         setLastBackup(null);
       }
@@ -105,16 +109,39 @@ export function DashboardView() {
       } catch {
         setGatewayOn(null);
       }
+      try {
+        const rows = await listTelemetryRecords(1);
+        setTelLast(rows[0]?.at ?? null);
+      } catch {
+        setTelLast(null);
+      }
     })();
   }, []);
 
-  const onlineDevices = devices.filter((d) => d.status === "Online").length;
+  const byStatus = useMemo(() => {
+    const counts = {
+      Online: 0,
+      Offline: 0,
+      Lost: 0,
+      Error: 0,
+      other: 0,
+    };
+    for (const d of devices) {
+      if (d.status in counts) {
+        counts[d.status as keyof typeof counts]++;
+      } else {
+        counts.other++;
+      }
+    }
+    return counts;
+  }, [devices]);
+
   const videoDevices = devices.filter((d) =>
     d.capabilities.some((c) => c === "video" || c === "walksnail"),
   );
-  const critical = events.filter(
-    (e) => e.severity === "error" || e.severity === "warning",
-  ).slice(0, 5);
+  const critical = events
+    .filter((e) => e.severity === "error" || e.severity === "warning")
+    .slice(0, 5);
 
   const deviceSummaryStatus: EntityStatusId = useMemo(() => {
     if (!devices.length) return "no_device";
@@ -129,11 +156,13 @@ export function DashboardView() {
   const showAdmin = role === "Administrator";
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-auto p-6">
+    <div className="flex h-full flex-col gap-4 overflow-auto bg-gradient-to-b from-ags-bg to-ags-surface/40 p-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Главная</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-ags-fg">
+          Главная
+        </h1>
         <p className="mt-1 text-sm text-ags-muted">
-          Сводка активного комплекса. Нет данных — N/A, без имитации Live.
+          Сводка активного комплекса. Нет данных — Н/Д, без имитации Live.
         </p>
       </div>
 
@@ -144,6 +173,13 @@ export function DashboardView() {
           onClick={() => setSection("planning")}
         >
           Открыть карту
+        </button>
+        <button
+          type="button"
+          className="rounded border border-ags-border px-3 py-1.5 text-sm"
+          onClick={() => navigateToModule("stations")}
+        >
+          Добавить станцию
         </button>
         <button
           type="button"
@@ -164,50 +200,60 @@ export function DashboardView() {
           className="rounded border border-ags-border px-3 py-1.5 text-sm"
           onClick={() => setSection("events")}
         >
-          Открыть события
+          Посмотреть события
         </button>
         <button
           type="button"
           className="rounded border border-ags-border px-3 py-1.5 text-sm"
-          onClick={() => navigateToModule("profiles")}
+          onClick={() => setSection("complexes")}
         >
           Выбрать комплекс
-        </button>
-        <button
-          type="button"
-          className="rounded border border-ags-border px-3 py-1.5 text-sm"
-          onClick={() => navigateToModule("stations")}
-        >
-          Станции
         </button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <Widget title="Активный комплекс (профиль)">
-          <p className="text-base font-medium">
-            {activeProfile?.name ?? "Не выбран"}
-          </p>
-          <p className="mt-1 text-xs text-ags-dim">
-            До GS-2 используется профиль как временный ярлык комплекса
-          </p>
+        <Widget title="Сводка комплекса">
+          <dl className="grid grid-cols-[7rem_1fr] gap-y-1.5 text-xs">
+            <dt className="text-ags-dim">Комплекс</dt>
+            <dd className="font-medium">{complex?.name ?? "Не выбран"}</dd>
+            <dt className="text-ags-dim">Площадка</dt>
+            <dd>{site?.name ?? "Н/Д"}</dd>
+            <dt className="text-ags-dim">Площадок</dt>
+            <dd className="font-mono">
+              {activeComplexId == null ? "Н/Д" : sites.length}
+            </dd>
+            <dt className="text-ags-dim">Станций</dt>
+            <dd className="font-mono">{stations.length}</dd>
+            <dt className="text-ags-dim">Всего комплексов</dt>
+            <dd className="font-mono">{complexes.length}</dd>
+          </dl>
         </Widget>
 
         {(showOps || showEng) && (
           <Widget title="Станции">
-            <p className="font-mono text-lg">
-              {stationCount == null ? "N/A" : stationCount}
+            <p className="font-mono text-lg">{stations.length}</p>
+            <p className="text-xs text-ags-dim">
+              в фильтре активного комплекса / площадки
             </p>
-            <p className="text-xs text-ags-dim">зарегистрировано в SQLite</p>
+            <p className="mt-2 text-xs text-ags-muted">
+              Последняя активность:{" "}
+              {stations[0]?.updatedAt
+                ? new Date(stations[0].updatedAt).toLocaleString("ru-RU")
+                : "Н/Д"}
+            </p>
           </Widget>
         )}
 
         <Widget title="Оборудование">
-          <div className="flex items-center gap-2">
+          <div className="mb-2 flex items-center gap-2">
             <StatusBadge status={deviceSummaryStatus} />
-            <span className="font-mono">
-              {onlineDevices}/{devices.length || 0} online
-            </span>
           </div>
+          <ul className="space-y-0.5 font-mono text-xs text-ags-muted">
+            <li>Подключено: {byStatus.Online}</li>
+            <li>Отключено: {byStatus.Offline}</li>
+            <li>Потеряно: {byStatus.Lost}</li>
+            <li>Ошибка: {byStatus.Error}</li>
+          </ul>
           {!devices.length && (
             <p className="mt-2 text-xs text-ags-dim">
               {entityStatus("no_device").labelRu}
@@ -216,9 +262,12 @@ export function DashboardView() {
         </Widget>
 
         {showOps && (
-          <Widget title="Видеоисточники">
+          <Widget title="Видео">
             {videoDevices.length === 0 ? (
-              <StatusBadge status="no_device" />
+              <>
+                <StatusBadge status="no_device" />
+                <p className="mt-2 text-xs text-ags-dim">Нет источников в реестре</p>
+              </>
             ) : (
               <ul className="space-y-1 text-xs">
                 {videoDevices.slice(0, 5).map((d) => (
@@ -234,9 +283,12 @@ export function DashboardView() {
 
         {showEng && (
           <Widget title="Телеметрия">
-            <StatusBadge status="not_available" />
+            <StatusBadge status={telLast ? "online" : "not_available"} />
             <p className="mt-2 text-xs text-ags-dim">
-              Сводка источника — после подключения адаптера (не DEMO)
+              Последнее обновление:{" "}
+              {telLast
+                ? new Date(telLast).toLocaleString("ru-RU")
+                : "Н/Д (нет записей)"}
             </p>
           </Widget>
         )}
@@ -256,52 +308,41 @@ export function DashboardView() {
           )}
         </Widget>
 
-        <Widget title="Локальная база">
-          <dl className="grid grid-cols-[6rem_1fr] gap-y-1 text-xs">
+        <Widget title="Локальная система">
+          <dl className="grid grid-cols-[6.5rem_1fr] gap-y-1 text-xs">
             <dt className="text-ags-dim">Среда</dt>
             <dd>{isTauriRuntime() ? "Tauri" : "Браузер"}</dd>
             <dt className="text-ags-dim">Schema</dt>
             <dd className="font-mono">
-              {schemaVersion == null ? "N/A" : `v${schemaVersion}`}
+              {schemaVersion == null ? "Н/Д" : `v${schemaVersion}`}
             </dd>
-            <dt className="text-ags-dim">Путь</dt>
+            <dt className="text-ags-dim">База</dt>
             <dd className="truncate font-mono" title={dbPath ?? undefined}>
-              {dbPath ?? "N/A"}
+              {dbPath ?? "Н/Д"}
+            </dd>
+            <dt className="text-ags-dim">Диск</dt>
+            <dd className="font-mono">{disk?.available ?? "Н/Д"}</dd>
+            <dt className="text-ags-dim">Бэкап</dt>
+            <dd className="truncate font-mono text-[10px]">
+              {lastBackup ?? "Не выполнялась / Н/Д"}
             </dd>
           </dl>
         </Widget>
 
-        <Widget title="Диск">
-          <p className="font-mono text-lg">{disk?.available ?? "N/A"}</p>
-          <p className="truncate text-xs text-ags-dim" title={disk?.path}>
-            {disk?.path ?? "Недоступно вне desktop"}
-          </p>
-        </Widget>
-
         {showAdmin && (
-          <Widget title="Резервная копия">
-            <p className="truncate font-mono text-xs">
-              {lastBackup ?? "Не выполнялась / N/A"}
+          <Widget title="Gateway">
+            <StatusBadge
+              status={
+                gatewayOn == null
+                  ? "not_available"
+                  : gatewayOn
+                    ? "online"
+                    : "not_configured"
+              }
+            />
+            <p className="mt-2 text-xs text-ags-dim">
+              Preview (не outbox UI)
             </p>
-          </Widget>
-        )}
-
-        {showAdmin && (
-          <Widget title="Система / Gateway">
-            <div className="flex flex-wrap gap-2">
-              <StatusBadge
-                status={
-                  gatewayOn == null
-                    ? "not_available"
-                    : gatewayOn
-                      ? "online"
-                      : "not_configured"
-                }
-              />
-              <span className="text-xs text-ags-dim">
-                Preview Gateway (не outbox)
-              </span>
-            </div>
           </Widget>
         )}
       </div>

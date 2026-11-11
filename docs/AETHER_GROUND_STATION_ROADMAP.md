@@ -15,16 +15,17 @@
 | Этап | Название | Оценка риска | Зависит от |
 |------|----------|--------------|------------|
 | **GS-0** | Product Audit & UX Blueprint | Low | — |
-| **GS-1** | Dashboard & Navigation | Medium | **DONE** |
-| **GS-2** | Complex & Site Manager | Medium | **DONE** (schema v5) |
-| **GS-3** | Station Planner | Medium–High | **DONE** (map drag, planner store) |
-| **GS-4** | Mast & Antenna Manager | Medium | **DONE** |
-| **GS-5** | Terrain Engine | Medium | **DONE** (A–B + CSV) |
-| **GS-6** | Device Manager hub UX | Medium | **DONE** |
-| **GS-7** | Video Center | High (HW) | **DONE** (shell; HW lab separate) |
-| **GS-8** | Telemetry Center | Medium | **DONE** (existing + N/A) |
-| **GS-9** | Event Center & Diagnostics | Low–Medium | **DONE** |
-| **GS-10** | Workspace & Integration | Medium | **DONE** (role templates + status) |
+| **GS-1** | Dashboard & Navigation (chrome) | Medium | **DONE** — TopBar complex/site, StatusBar last-update, Dashboard planner summary |
+| **GS-2** | Complex & Site Manager | Medium | **Каркас DONE** (schema v5 CRUD) |
+| **GS-3** | Station Planner | Medium–High | **Каркас** (map drag, store); **gap:** единый 4-pane layout |
+| **GS-4** | Mast & Antenna Manager | Medium | **Каркас DONE** |
+| **GS-5** | Terrain Engine | Medium | **Каркас** (A–B + CSV); **gap:** az-coupled + 3D DEM |
+| **GS-6** | Device Manager hub UX | Medium | **Каркас DONE** |
+| **GS-7** | Video Center | High (HW) | **Каркас**; HW lab separate |
+| **GS-8** | Telemetry Center | Medium | **Каркас** |
+| **GS-9** | Event Center & Diagnostics | Low–Medium | **Каркас DONE** |
+| **GS-10** | Workspace & Integration | Medium | **Каркас**; полная §15 — backlog |
+| **GS-PT** | Pan-Tilt visualization | High | **NOT DONE** (shell only; no 3D/map sync) |
 
 GS-6/7/8 могут частично идти параллельно после GS-1 **только** если не ломают shared `ModuleId` / DeviceManager.
 

@@ -44,4 +44,8 @@ test("GS-1: eight primary nav sections and home dashboard", async ({
   await expect(page.getByRole("heading", { name: /^Главная$/i })).toBeVisible({
     timeout: 10_000,
   });
+
+  await expect(page.getByLabel("Активный комплекс")).toBeVisible();
+  await expect(page.getByLabel("Активная площадка")).toBeVisible();
+  await expect(page.getByText("Сводка комплекса")).toBeVisible();
 });

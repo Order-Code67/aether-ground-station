@@ -1,9 +1,11 @@
-# Aether Ground Station — UX Architecture (GS-0)
+# Aether Ground Station — UX Architecture (GS-0 + GS-1 chrome)
 
 **Документ:** `AETHER_UX_ARCHITECTURE.md`  
 **Язык UI:** русский  
 **Принцип:** одно ядро — единый интерфейс — независимые модули — единый SSOT.  
-**Не цель:** десятки равнозначных пунктов меню.
+**Не цель:** десятки равнозначных пунктов меню.  
+**Обновление GS-1:** TopBar = комплекс + площадка из `stationPlannerStore`; StatusBar = устройства/видео/телеметрия/предупреждения/**время обновления**; Dashboard = сводка активного комплекса (не profile-only).  
+**Честно:** единый 4-pane Station Planner и GS-PT 3D — ещё не UX-ready (см. `AETHER_PRODUCT_ARCHITECTURE.md`).
 
 ---
 
