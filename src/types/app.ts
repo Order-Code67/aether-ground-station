@@ -1,5 +1,6 @@
-/** Идентификаторы модулей платформы (V2). */
+/** Идентификаторы модулей платформы (V2 + GS-1 home). */
 export type ModuleId =
+  | "home"
   | "workspace"
   | "video"
   | "walksnail"
@@ -31,6 +32,12 @@ export interface ModuleDefinition {
 }
 
 export const MODULES: readonly ModuleDefinition[] = [
+  {
+    id: "home",
+    label: "Главная",
+    stage: 1,
+    description: "Dashboard сводки комплекса",
+  },
   {
     id: "workspace",
     label: "Рабочее пространство",

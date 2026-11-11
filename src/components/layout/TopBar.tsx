@@ -1,5 +1,8 @@
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useProfileStore } from "@/stores/profileStore";
+import { useAppStore } from "@/stores/appStore";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { isTauriRuntime } from "@/services/tauri";
 import { templateLabel, WORKSPACE_TEMPLATES } from "@/modules/workspace/templates";
 import type { WorkspaceTemplateId } from "@/types";
 
@@ -8,10 +11,10 @@ export function TopBar() {
   const activeLayoutId = useWorkspaceStore((s) => s.activeLayoutId);
   const setActiveLayout = useWorkspaceStore((s) => s.setActiveLayout);
   const applyTemplate = useWorkspaceStore((s) => s.applyTemplate);
-  const duplicateActive = useWorkspaceStore((s) => s.duplicateActive);
   const setEventLogVisible = useWorkspaceStore((s) => s.setEventLogVisible);
   const setDeviceRailVisible = useWorkspaceStore((s) => s.setDeviceRailVisible);
   const active = useWorkspaceStore((s) => s.active());
+  const ready = useAppStore((s) => s.ready);
 
   const profiles = useProfileStore((s) => s.profiles);
   const activeProfileId = useProfileStore((s) => s.activeProfileId);
@@ -32,7 +35,7 @@ export function TopBar() {
       <div className="mx-2 h-6 w-px bg-ags-border" />
 
       <label className="flex items-center gap-2 text-xs text-ags-muted">
-        Профиль
+        Профиль (комплекс)
         <select
           className="max-w-[12rem] rounded border border-ags-border bg-ags-elevated px-2 py-1 text-ags-fg"
           value={activeProfileId ?? ""}
@@ -47,10 +50,16 @@ export function TopBar() {
         </select>
       </label>
 
-      <label className="flex items-center gap-2 text-xs text-ags-muted">
+      <StatusBadge label={ready ? "Система" : "Загрузка"} tone={ready ? "ok" : "warn"} />
+      <StatusBadge
+        label={isTauriRuntime() ? "Desktop" : "Preview"}
+        tone={isTauriRuntime() ? "ok" : "neutral"}
+      />
+
+      <label className="ml-2 flex items-center gap-2 text-xs text-ags-muted">
         Workspace
         <select
-          className="max-w-[12rem] rounded border border-ags-border bg-ags-elevated px-2 py-1 text-ags-fg"
+          className="max-w-[10rem] rounded border border-ags-border bg-ags-elevated px-2 py-1 text-ags-fg"
           value={activeLayoutId}
           onChange={(e) => setActiveLayout(e.target.value)}
         >
@@ -84,28 +93,20 @@ export function TopBar() {
         </select>
       </label>
 
-      <button
-        type="button"
-        onClick={duplicateActive}
-        className="rounded border border-ags-border px-2 py-1 text-xs text-ags-muted hover:bg-ags-elevated hover:text-ags-fg"
-      >
-        Копировать layout
-      </button>
-
       <div className="ml-auto flex items-center gap-2">
         <button
           type="button"
           onClick={() => setDeviceRailVisible(!active.deviceRailVisible)}
           className="rounded border border-ags-border px-2 py-1 text-xs text-ags-muted hover:bg-ags-elevated hover:text-ags-fg"
         >
-          {active.deviceRailVisible ? "Скрыть оборудование" : "Показать оборудование"}
+          {active.deviceRailVisible ? "Скрыть rail" : "Оборудование"}
         </button>
         <button
           type="button"
           onClick={() => setEventLogVisible(!active.eventLogVisible)}
           className="rounded border border-ags-border px-2 py-1 text-xs text-ags-muted hover:bg-ags-elevated hover:text-ags-fg"
         >
-          {active.eventLogVisible ? "Скрыть журнал" : "Показать журнал"}
+          {active.eventLogVisible ? "Скрыть журнал" : "Журнал"}
         </button>
       </div>
     </header>

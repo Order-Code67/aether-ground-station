@@ -31,6 +31,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::app::get_app_info,
+            commands::app::system_disk_space,
             auth_session::auth_login,
             auth_session::auth_bind_session,
             auth_session::auth_clear_session,

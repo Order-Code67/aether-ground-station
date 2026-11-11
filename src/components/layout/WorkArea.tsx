@@ -2,7 +2,11 @@ import { Suspense, lazy, type ComponentType } from "react";
 import { MODULES, type ModuleId } from "@/types";
 import { useNavigationStore } from "@/stores/navigationStore";
 import { ModuleErrorBoundary } from "@/components/common/ModuleErrorBoundary";
+import { SectionSubNav } from "./SectionSubNav";
 
+const HomeView = lazy(() =>
+  import("@/modules/home").then((m) => ({ default: m.HomeView })),
+);
 const WorkspaceView = lazy(() =>
   import("@/modules/workspace").then((m) => ({ default: m.WorkspaceView })),
 );
@@ -71,6 +75,7 @@ const SettingsView = lazy(() =>
 );
 
 const VIEWS: Record<ModuleId, ComponentType> = {
+  home: HomeView,
   workspace: WorkspaceView,
   video: VideoView,
   walksnail: WalksnailView,
@@ -109,16 +114,19 @@ export function WorkArea() {
   }
 
   return (
-    <main className="min-w-0 flex-1 overflow-auto bg-ags-bg">
-      <ModuleErrorBoundary name={def.label}>
-        <Suspense
-          fallback={
-            <div className="p-6 text-sm text-ags-muted">Загрузка модуля…</div>
-          }
-        >
-          <View />
-        </Suspense>
-      </ModuleErrorBoundary>
-    </main>
+    <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-ags-bg">
+      <SectionSubNav />
+      <main className="min-h-0 min-w-0 flex-1 overflow-auto">
+        <ModuleErrorBoundary name={def.label}>
+          <Suspense
+            fallback={
+              <div className="p-6 text-sm text-ags-muted">Загрузка модуля…</div>
+            }
+          >
+            <View />
+          </Suspense>
+        </ModuleErrorBoundary>
+      </main>
+    </div>
   );
 }

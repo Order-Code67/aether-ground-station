@@ -1,45 +1,107 @@
+import { useEffect, useState } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useProfileStore } from "@/stores/profileStore";
+import { useEventLogStore } from "@/stores/eventLogStore";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { isTauriRuntime } from "@/services/tauri";
+import { deviceManager } from "@/services/devices/deviceManager";
+import { getDiskSpace, formatBytes } from "@/services/system/diskSpace";
+import { getGatewayStatus } from "@/services/gateway";
+import type { DeviceCard, EntityStatusId } from "@/types";
+import { deviceToEntityStatus } from "@/types/entityStatus";
 
 export function StatusBar() {
   const appInfo = useAppStore((s) => s.appInfo);
   const ready = useAppStore((s) => s.ready);
   const session = useAuthStore((s) => s.session);
   const logout = useAuthStore((s) => s.logout);
+  const activeProfile = useProfileStore((s) => {
+    const id = s.activeProfileId;
+    return s.profiles.find((p) => p.id === id);
+  });
+  const criticalCount = useEventLogStore(
+    (s) =>
+      s.events.filter((e) => e.severity === "error" || e.severity === "warning")
+        .length,
+  );
   const tauri = isTauriRuntime();
 
+  const [devices, setDevices] = useState<DeviceCard[]>([]);
+  const [diskLabel, setDiskLabel] = useState("N/A");
+  const [gwStatus, setGwStatus] = useState<EntityStatusId>("not_available");
+
+  useEffect(() => deviceManager.subscribe(setDevices), []);
+
+  useEffect(() => {
+    void (async () => {
+      const space = await getDiskSpace();
+      setDiskLabel(space ? formatBytes(space.availableBytes) : "N/A");
+      if (!tauri) {
+        setGwStatus("not_available");
+        return;
+      }
+      try {
+        const st = await getGatewayStatus();
+        setGwStatus(st.enabled ? "online" : "not_configured");
+      } catch {
+        setGwStatus("not_available");
+      }
+    })();
+  }, [tauri]);
+
+  const online = devices.filter((d) => d.status === "Online").length;
+  const videoDev = devices.filter((d) =>
+    d.capabilities.some((c) => c === "video" || c === "walksnail"),
+  );
+  const videoStatus: EntityStatusId = !videoDev.length
+    ? "no_device"
+    : deviceToEntityStatus(
+        videoDev.find((d) => d.status === "Online")?.status ??
+          videoDev[0]!.status,
+      );
+
   return (
-    <footer className="flex h-8 shrink-0 items-center gap-3 border-t border-ags-border-subtle bg-ags-surface px-3 text-xs text-ags-muted">
-      <span className="font-medium text-ags-fg">
-        {appInfo?.name ?? "Aether Ground Station"}
+    <footer className="flex h-8 shrink-0 items-center gap-2 overflow-hidden border-t border-ags-border-subtle bg-ags-surface px-3 text-[11px] text-ags-muted">
+      <span className="truncate font-medium text-ags-fg">
+        {activeProfile?.name ?? "Комплекс —"}
       </span>
-      <span>v{appInfo?.version ?? "0.3.0"}</span>
+      <span className="text-ags-dim">·</span>
+      <span title="Площадка / станция — после GS-2">Площадка N/A</span>
+      <span className="text-ags-dim">·</span>
+      <span title="Активная станция — после GS-3">Станция N/A</span>
+      <span className="text-ags-dim">·</span>
+      <span>
+        Устр. {online}/{devices.length}
+      </span>
+      <StatusBadge status={videoStatus} />
       <StatusBadge
-        label={ready ? "Готово" : "Загрузка"}
+        label={tauri ? "SQLite" : "Preview DB"}
         tone={ready ? "ok" : "warn"}
       />
-      <StatusBadge
-        label={tauri ? "Tauri" : "Браузер"}
-        tone={tauri ? "ok" : "neutral"}
-      />
-      {session && (
-        <StatusBadge
-          label={`${session.user.username} · ${session.user.role}`}
-          tone="ok"
-        />
-      )}
+      <span title="Свободно на диске">Диск {diskLabel}</span>
+      <span className={criticalCount ? "text-ags-warning" : ""}>
+        События {criticalCount}
+      </span>
+      <StatusBadge status={gwStatus} />
       <span className="ml-auto flex items-center gap-2 text-ags-dim">
-        <span>ядро · без имитации оборудования</span>
+        <span>
+          {appInfo?.name ?? "Aether"} v{appInfo?.version ?? "1.0.0"}
+        </span>
         {session && (
-          <button
-            type="button"
-            className="text-ags-muted hover:text-ags-fg"
-            onClick={logout}
-          >
-            Выход
-          </button>
+          <>
+            <StatusBadge
+              label={`${session.user.username}`}
+              tone="ok"
+            />
+            <button
+              type="button"
+              className="text-ags-muted hover:text-ags-fg"
+              onClick={logout}
+            >
+              Выход
+            </button>
+          </>
         )}
       </span>
     </footer>

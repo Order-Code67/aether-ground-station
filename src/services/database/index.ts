@@ -44,6 +44,13 @@ export async function dbUpsertSetting(key: string, value: string): Promise<void>
   await call("db_upsert_setting", { key, value });
 }
 
+export async function dbGetSetting(key: string): Promise<string | null> {
+  if (!isTauriRuntime()) {
+    return memoryKv.get(`setting:${key}`) ?? null;
+  }
+  return call<string | null>("db_get_setting", { key });
+}
+
 export async function dbUpsertJson(key: string, value: unknown): Promise<void> {
   const raw = JSON.stringify(value);
   if (!isTauriRuntime()) {

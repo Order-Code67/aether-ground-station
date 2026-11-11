@@ -1,22 +1,31 @@
 import { cn } from "@/utils/cn";
+import {
+  entityStatus,
+  type EntityStatusId,
+} from "@/types/entityStatus";
 
 interface StatusBadgeProps {
-  label: string;
+  label?: string;
   tone?: "neutral" | "ok" | "warn" | "danger";
+  /** When set, label/tone derived from unified entity status (RU). */
+  status?: EntityStatusId;
 }
 
-export function StatusBadge({ label, tone = "neutral" }: StatusBadgeProps) {
+export function StatusBadge({ label, tone = "neutral", status }: StatusBadgeProps) {
+  const view = status ? entityStatus(status) : null;
+  const text = view?.labelRu ?? label ?? "—";
+  const t = view?.tone ?? tone;
   return (
     <span
       className={cn(
         "inline-flex items-center rounded border px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide",
-        tone === "neutral" && "border-ags-border text-ags-muted",
-        tone === "ok" && "border-ags-success/40 text-ags-success",
-        tone === "warn" && "border-ags-warning/40 text-ags-warning",
-        tone === "danger" && "border-ags-danger/40 text-ags-danger",
+        t === "neutral" && "border-ags-border text-ags-muted",
+        t === "ok" && "border-ags-success/40 text-ags-success",
+        t === "warn" && "border-ags-warning/40 text-ags-warning",
+        t === "danger" && "border-ags-danger/40 text-ags-danger",
       )}
     >
-      {label}
+      {text}
     </span>
   );
 }
