@@ -17,7 +17,7 @@ import {
 import { useStationPlannerStore } from "@/stores/stationPlannerStore";
 import { useAuthStore } from "@/stores/authStore";
 import { bearingDeg, haversineM } from "@/utils/geo";
-import { OSM_STYLE, offlineStyle } from "./mapStyles";
+import { BUNDLED_OFFLINE_TILES, OSM_STYLE, offlineStyle } from "./mapStyles";
 
 interface UserMarker {
   id: string;
@@ -57,7 +57,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const [distanceM, setDistanceM] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tileMode, setTileMode] = useState<TileMode>("offline");
-  const [localUrl, setLocalUrl] = useState("");
+  const [localUrl, setLocalUrl] = useState(BUNDLED_OFFLINE_TILES);
   const stationMarkersRef = useRef<Marker[]>([]);
 
   const measureModeRef = useRef(measureMode);
@@ -133,7 +133,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         "info",
         "map",
         tileMode === "offline"
-          ? "Карта: офлайн-база (без интернета)"
+          ? "Карта: офлайн-тайлы (без интернета)"
           : "Карта инициализирована",
       );
     } catch (e) {
@@ -365,14 +365,14 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           value={tileMode}
           onChange={(e) => setTileMode(e.target.value as TileMode)}
         >
-          <option value="offline">Офлайн (без тайлов)</option>
+          <option value="offline">Офлайн (встроенные)</option>
           <option value="local">Локальные XYZ</option>
           <option value="osm">OSM онлайн</option>
         </select>
         {tileMode === "local" && (
           <input
             className="min-w-[14rem] flex-1 rounded border border-ags-border bg-ags-elevated px-2 py-1"
-            placeholder="http://127.0.0.1:8080/{z}/{x}/{y}.png"
+            placeholder="/tiles/{z}/{x}/{y}.png"
             value={localUrl}
             onChange={(e) => setLocalUrl(e.target.value)}
           />

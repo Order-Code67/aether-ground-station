@@ -110,7 +110,7 @@ export function StatusBar() {
   }, [events, devices, telAt]);
 
   return (
-    <footer className="flex h-8 shrink-0 items-center gap-2 overflow-hidden border-t border-ags-border-subtle bg-ags-surface px-3 text-[11px] text-ags-muted">
+    <footer className="flex h-9 shrink-0 items-center gap-2.5 overflow-hidden border-t border-ags-border-subtle bg-ags-surface/95 px-3 text-[11px] text-ags-muted backdrop-blur-sm">
       <StatusBadge
         label={ready ? "Приложение" : "Загрузка"}
         tone={ready ? "ok" : "warn"}
@@ -118,11 +118,11 @@ export function StatusBar() {
       <span className="truncate font-medium text-ags-fg">
         {complex?.name ?? "Комплекс —"}
       </span>
-      <span className="text-ags-dim">·</span>
+      <span className="text-ags-dim">/</span>
       <span className="truncate">{site?.name ?? "Площадка N/A"}</span>
-      <span className="text-ags-dim">·</span>
+      <span className="text-ags-dim">/</span>
       <span className="truncate">{station?.name ?? "Станция N/A"}</span>
-      <span className="text-ags-dim">·</span>
+      <span className="mx-0.5 h-3 w-px bg-ags-border" />
       <span title="Подключённые устройства">
         Устр. {online}/{devices.length}
       </span>
@@ -131,23 +131,19 @@ export function StatusBar() {
       <span className={criticalCount ? "text-ags-warning" : ""}>
         Пред. {criticalCount}
       </span>
-      <span title="Последнее обновление (события / устройства / телеметрия)">
+      <span title="Последнее обновление">
         Обновлено {formatClock(lastUpdate)}
       </span>
-      <StatusBadge
-        label={tauri ? "SQLite" : "Preview"}
-        tone={ready ? "ok" : "warn"}
-      />
       <span title="Свободно на диске">Диск {diskLabel}</span>
       <StatusBadge status={gwStatus} />
-      <span className="ml-auto flex items-center gap-2 text-ags-dim">
-        <span>
+      <span className="ml-auto flex items-center gap-3 text-ags-dim">
+        <span className="font-medium tracking-wide">
           v{appInfo?.version ?? "1.0.0"}
         </span>
         {session && (
           <button
             type="button"
-            className="text-ags-muted hover:text-ags-fg"
+            className="rounded px-1.5 py-0.5 text-ags-muted transition hover:bg-ags-elevated hover:text-ags-fg"
             onClick={logout}
           >
             Выход

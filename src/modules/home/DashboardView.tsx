@@ -26,7 +26,7 @@ function Widget({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-ags-border/80 bg-ags-panel p-4 text-sm shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
+    <section className="ags-panel p-4 text-sm">
       <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ags-dim">
         {title}
       </h2>

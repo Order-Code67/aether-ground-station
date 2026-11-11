@@ -1,5 +1,8 @@
 import type { StyleSpecification } from "maplibre-gl";
 
+/** Bundled offline dark tiles (public/tiles) — no network required. */
+export const BUNDLED_OFFLINE_TILES = "/tiles/{z}/{x}/{y}.png";
+
 /** Online OSM raster — requires network. */
 export const OSM_STYLE: StyleSpecification = {
   version: 8,
@@ -11,32 +14,41 @@ export const OSM_STYLE: StyleSpecification = {
       attribution: "© OpenStreetMap",
     },
   },
-  layers: [{ id: "osm", type: "raster", source: "osm" }],
+  layers: [
+    {
+      id: "bg",
+      type: "background",
+      paint: { "background-color": "#0b1018" },
+    },
+    { id: "osm", type: "raster", source: "osm" },
+  ],
 };
 
 /**
- * Offline base: no external tiles. Markers / measure still work.
- * Local MBTiles / XYZ can be plugged via `localTileUrlTemplate`.
+ * Offline / local XYZ. Default template = bundled dark tiles under /tiles.
+ * Markers / measure / azimuth work even if some zooms are missing.
  */
 export function offlineStyle(
   localTileUrlTemplate?: string,
 ): StyleSpecification {
-  if (localTileUrlTemplate?.trim()) {
+  const template = (localTileUrlTemplate ?? BUNDLED_OFFLINE_TILES).trim();
+  if (template) {
     return {
       version: 8,
       sources: {
         local: {
           type: "raster",
-          tiles: [localTileUrlTemplate.trim()],
+          tiles: [template],
           tileSize: 256,
-          attribution: "Local tiles",
+          attribution: "Aether offline tiles",
+          maxzoom: 12,
         },
       },
       layers: [
         {
           id: "bg",
           type: "background",
-          paint: { "background-color": "#12161f" },
+          paint: { "background-color": "#0b1018" },
         },
         { id: "local", type: "raster", source: "local" },
       ],
@@ -49,7 +61,7 @@ export function offlineStyle(
       {
         id: "bg",
         type: "background",
-        paint: { "background-color": "#12161f" },
+        paint: { "background-color": "#0b1018" },
       },
     ],
   };

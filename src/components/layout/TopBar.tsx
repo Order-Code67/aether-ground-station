@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Bell } from "lucide-react";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useAppStore } from "@/stores/appStore";
 import { useAuthStore } from "@/stores/authStore";
@@ -18,6 +19,7 @@ export function TopBar() {
   const setDeviceRailVisible = useWorkspaceStore((s) => s.setDeviceRailVisible);
   const active = useWorkspaceStore((s) => s.active());
   const ready = useAppStore((s) => s.ready);
+  const appInfo = useAppStore((s) => s.appInfo);
   const session = useAuthStore((s) => s.session);
 
   const complexes = useStationPlannerStore((s) => s.complexes);
@@ -38,36 +40,34 @@ export function TopBar() {
     void refresh();
   }, [refresh]);
 
-  const complex = complexes.find((c) => c.id === activeComplexId);
-  const site = sites.find((s) => s.id === activeSiteId);
-
   return (
-    <header className="flex h-11 shrink-0 items-center gap-3 border-b border-ags-border-subtle bg-ags-surface px-3">
-      <div className="flex min-w-0 items-center gap-2">
-        <div className="flex h-8 w-8 shrink-0 overflow-hidden rounded bg-ags-elevated">
+    <header className="ags-topbar flex h-12 shrink-0 items-center gap-3 border-b border-ags-border-subtle bg-ags-surface/95 px-4 backdrop-blur-md">
+      {/* Single brand mark — NavRail has no logo */}
+      <div className="flex min-w-0 items-center gap-2.5">
+        <div className="ags-brand-mark flex h-8 w-8 shrink-0 overflow-hidden rounded-lg ring-1 ring-ags-accent/30">
           <img
             src="/aether-logo.jpg"
-            alt=""
+            alt="Aether"
             className="h-full w-full object-cover"
           />
         </div>
-        <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.16em] text-ags-dim">
+        <div className="min-w-0 leading-tight">
+          <div className="truncate text-sm font-semibold tracking-tight text-ags-fg">
             Aether Ground Station
           </div>
-          <div className="truncate text-sm font-semibold text-ags-fg">
-            {complex?.name ?? "Комплекс не выбран"}
-            {site ? ` · ${site.name}` : ""}
+          <div className="text-[10px] text-ags-dim">
+            v{appInfo?.version ?? "1.0.0"}
+            {ready ? " · система в норме" : " · загрузка…"}
           </div>
         </div>
       </div>
 
-      <div className="mx-1 h-6 w-px bg-ags-border" />
+      <div className="mx-1 hidden h-6 w-px bg-ags-border sm:block" />
 
-      <label className="flex items-center gap-1.5 text-xs text-ags-muted">
+      <label className="ags-field hidden items-center gap-1.5 text-[11px] text-ags-muted md:flex">
         Комплекс
         <select
-          className="max-w-[10rem] rounded border border-ags-border bg-ags-elevated px-2 py-1 text-ags-fg"
+          className="ags-select max-w-[11rem]"
           value={activeComplexId ?? ""}
           onChange={(e) => setActiveComplexId(e.target.value || null)}
           aria-label="Активный комплекс"
@@ -81,10 +81,10 @@ export function TopBar() {
         </select>
       </label>
 
-      <label className="flex items-center gap-1.5 text-xs text-ags-muted">
+      <label className="ags-field hidden items-center gap-1.5 text-[11px] text-ags-muted lg:flex">
         Площадка
         <select
-          className="max-w-[10rem] rounded border border-ags-border bg-ags-elevated px-2 py-1 text-ags-fg"
+          className="ags-select max-w-[10rem]"
           value={activeSiteId ?? ""}
           disabled={!activeComplexId}
           onChange={(e) => setActiveSiteId(e.target.value || null)}
@@ -99,16 +99,10 @@ export function TopBar() {
         </select>
       </label>
 
-      <StatusBadge label={ready ? "Готово" : "Загрузка"} tone={ready ? "ok" : "warn"} />
-      <StatusBadge
-        label={isTauriRuntime() ? "Desktop" : "Preview"}
-        tone={isTauriRuntime() ? "ok" : "neutral"}
-      />
-
-      <label className="flex items-center gap-1.5 text-xs text-ags-muted">
-        Workspace
+      <label className="ags-field hidden items-center gap-1.5 text-[11px] text-ags-muted xl:flex">
+        Профиль
         <select
-          className="max-w-[9rem] rounded border border-ags-border bg-ags-elevated px-2 py-1 text-ags-fg"
+          className="ags-select max-w-[9rem]"
           value={activeLayoutId}
           onChange={(e) => setActiveLayout(e.target.value)}
           aria-label="Рабочее пространство"
@@ -121,10 +115,10 @@ export function TopBar() {
         </select>
       </label>
 
-      <label className="flex items-center gap-1.5 text-xs text-ags-muted">
+      <label className="ags-field hidden items-center gap-1.5 text-[11px] text-ags-muted 2xl:flex">
         Шаблон
         <select
-          className="rounded border border-ags-border bg-ags-elevated px-2 py-1 text-ags-fg"
+          className="ags-select"
           defaultValue=""
           aria-label="Шаблон workspace"
           onChange={(e) => {
@@ -145,35 +139,45 @@ export function TopBar() {
       </label>
 
       <div className="ml-auto flex items-center gap-2">
-        {warnCount > 0 ? (
-          <StatusBadge label={`Пред. ${warnCount}`} tone="warn" />
-        ) : (
-          <span
-            className="text-[10px] text-ags-dim"
-            title="Нет предупреждений в сессии"
-          >
-            Уведомления: нет
-          </span>
+        <StatusBadge
+          label={ready ? "На связи" : "Загрузка"}
+          tone={ready ? "ok" : "warn"}
+        />
+        {!isTauriRuntime() && (
+          <StatusBadge label="Preview" tone="neutral" />
         )}
+
+        <button
+          type="button"
+          className="relative rounded-lg border border-ags-border/80 bg-ags-elevated/50 p-1.5 text-ags-muted transition hover:border-ags-accent/40 hover:text-ags-fg"
+          title={warnCount ? `Предупреждений: ${warnCount}` : "Уведомления"}
+          onClick={() => setEventLogVisible(!active.eventLogVisible)}
+          aria-label="Уведомления"
+        >
+          <Bell size={15} strokeWidth={1.75} />
+          {warnCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-ags-danger px-1 text-[9px] font-semibold text-white">
+              {warnCount > 9 ? "9+" : warnCount}
+            </span>
+          )}
+        </button>
+
         {session && (
-          <StatusBadge
-            label={`${session.user.username} · ${session.user.role}`}
-            tone="ok"
-          />
+          <div className="hidden items-center gap-2 rounded-lg border border-ags-border/70 bg-ags-elevated/40 px-2.5 py-1 sm:flex">
+            <span className="h-1.5 w-1.5 rounded-full bg-ags-success" />
+            <span className="text-[11px] text-ags-fg">
+              {session.user.username}
+            </span>
+            <span className="text-[10px] text-ags-dim">{session.user.role}</span>
+          </div>
         )}
+
         <button
           type="button"
           onClick={() => setDeviceRailVisible(!active.deviceRailVisible)}
-          className="rounded border border-ags-border px-2 py-1 text-xs text-ags-muted hover:bg-ags-elevated hover:text-ags-fg"
+          className="hidden rounded-lg border border-ags-border/80 px-2 py-1 text-[11px] text-ags-muted transition hover:bg-ags-elevated hover:text-ags-fg xl:inline"
         >
           {active.deviceRailVisible ? "Скрыть rail" : "Rail"}
-        </button>
-        <button
-          type="button"
-          onClick={() => setEventLogVisible(!active.eventLogVisible)}
-          className="rounded border border-ags-border px-2 py-1 text-xs text-ags-muted hover:bg-ags-elevated hover:text-ags-fg"
-        >
-          {active.eventLogVisible ? "Скрыть журнал" : "Журнал"}
         </button>
       </div>
     </header>

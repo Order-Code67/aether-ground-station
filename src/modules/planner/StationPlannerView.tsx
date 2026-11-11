@@ -26,8 +26,8 @@ export function StationPlannerView() {
       className="flex h-full min-h-0 flex-col bg-ags-bg"
       data-testid="station-planner"
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-ags-border-subtle px-2 py-1 text-[10px]">
-        <span className="font-semibold uppercase tracking-wide text-ags-muted">
+      <div className="flex shrink-0 items-center gap-2 border-b border-ags-border-subtle bg-ags-surface/80 px-3 py-1.5 text-[10px] backdrop-blur-sm">
+        <span className="font-semibold uppercase tracking-[0.14em] text-ags-accent">
           Station Planner
         </span>
         <button

@@ -17,6 +17,7 @@
     "smoke:install": "powershell -ExecutionPolicy Bypass -File scripts/smoke-post-install.ps1",
     "ffmpeg:fetch": "powershell -ExecutionPolicy Bypass -File scripts/fetch-ffmpeg.ps1",
     "ffmpeg:check": "node scripts/check-ffmpeg-bundle.mjs",
+    "tiles:fetch": "node scripts/fetch-offline-tiles.mjs",
     "pretauri:build": "node scripts/check-ffmpeg-bundle.mjs",
     "gateway:stub": "npm --prefix services/gateway-server start",
     "gateway:certs": "node scripts/gen-gateway-certs.mjs",

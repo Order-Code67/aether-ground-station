@@ -18,26 +18,31 @@ export function LoginScreen() {
   };
 
   return (
-    <div className="flex h-full w-full items-center justify-center bg-ags-bg p-6">
+    <div className="relative flex h-full w-full items-center justify-center overflow-hidden bg-ags-bg p-6">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_420px_at_50%_-10%,rgba(61,139,253,0.18),transparent_60%)]" />
       <form
         onSubmit={(e) => void submit(e)}
-        className="w-full max-w-sm space-y-4 rounded-lg border border-ags-border bg-ags-panel p-6"
+        className="ags-panel relative w-full max-w-sm space-y-4 p-7"
       >
         <div className="flex items-center gap-3">
-          <img
-            src="/aether-logo.jpg"
-            alt=""
-            className="h-12 w-12 rounded-md object-cover"
-          />
+          <div className="ags-brand-mark h-12 w-12 overflow-hidden rounded-xl ring-1 ring-ags-accent/35">
+            <img
+              src="/aether-logo.jpg"
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          </div>
           <div>
-            <h1 className="text-lg font-semibold">Aether Ground Station</h1>
-            <p className="text-xs text-ags-muted">Локальный вход</p>
+            <h1 className="text-lg font-semibold tracking-tight">
+              Aether Ground Station
+            </h1>
+            <p className="text-xs text-ags-muted">Локальный вход · offline ready</p>
           </div>
         </div>
         <label className="block text-xs text-ags-muted">
           Пользователь
           <input
-            className="mt-1 w-full rounded border border-ags-border bg-ags-elevated px-3 py-2 text-sm text-ags-fg"
+            className="mt-1 w-full rounded-lg border border-ags-border bg-ags-elevated px-3 py-2 text-sm text-ags-fg outline-none focus:border-ags-accent/50"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
@@ -47,7 +52,7 @@ export function LoginScreen() {
           Пароль
           <input
             type="password"
-            className="mt-1 w-full rounded border border-ags-border bg-ags-elevated px-3 py-2 text-sm text-ags-fg"
+            className="mt-1 w-full rounded-lg border border-ags-border bg-ags-elevated px-3 py-2 text-sm text-ags-fg outline-none focus:border-ags-accent/50"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
@@ -57,13 +62,10 @@ export function LoginScreen() {
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded bg-ags-accent py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="w-full rounded-lg bg-ags-accent py-2.5 text-sm font-medium text-white shadow-[0_8px_24px_rgba(61,139,253,0.25)] transition hover:bg-ags-accent-muted disabled:opacity-50"
         >
           {busy ? "Вход…" : "Войти"}
         </button>
-        <p className="text-[11px] text-ags-dim">
-          По умолчанию: admin / admin (смените после первого входа).
-        </p>
       </form>
     </div>
   );

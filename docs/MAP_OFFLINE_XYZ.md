@@ -1,27 +1,34 @@
 # Map — Offline / Local XYZ
 
-**UI:** Map panel → режим тайлов: `Офлайн` | `Локальные XYZ` | `OSM`.
+**UI:** Map panel → режим тайлов: `Офлайн (встроенные)` | `Локальные XYZ` | `OSM`.
 
-## Offline (без тайлов)
+## Offline (встроенные тайлы) — по умолчанию
 
-- Стиль `offlineStyle()` — только тёмный background.
-- Маркеры станций, азимуты и measure работают без сети.
-- Подходит для air-gapped стенда.
+- Стиль `offlineStyle()` → `/tiles/{z}/{x}/{y}.png` из `public/tiles`.
+- Тёмная база (Carto Dark Matter), без интернета.
+- Покрытия: мир z0–z5 + детализация Москва z6–z11.
+- Маркеры станций, азимуты и measure работают всегда.
+
+Обновить пакет:
+
+```bash
+npm run tiles:fetch
+```
 
 ## Local XYZ
 
-1. Поднимите локальный тайловый сервер (например `tileserver-gl`, `mbtileserver`, или статику `/{z}/{x}/{y}.png`).
-2. В Map panel выберите **Локальные XYZ**.
-3. Введите шаблон URL, например:
-   - `http://127.0.0.1:8080/data/osm/{z}/{x}/{y}.png`
-   - `http://127.0.0.1:8081/{z}/{x}/{y}.png`
-4. Карта должна показать растр без обращения к `tile.openstreetmap.org`.
+1. Тайловый сервер или свой шаблон URL.
+2. Режим **Локальные XYZ**.
+3. Пример: `http://127.0.0.1:8080/{z}/{x}/{y}.png`
 
-## Smoke checklist
+## OSM онлайн
 
-- [ ] Offline: карта инициализируется без network errors в console.
-- [ ] Local XYZ: тайлы грузятся с localhost (Network tab → 200).
-- [ ] Станции с координатами видны как markers + azimuth line.
-- [ ] OSM mode (optional): online tiles when network allowed.
+Требует сеть (`tile.openstreetmap.org`). CSP разрешает только этот хост для online-режима.
 
-Код: `src/modules/map/mapStyles.ts`, `MapPanel.tsx`.
+## Smoke
+
+- [ ] Offline: карта с растром без network errors
+- [ ] Станции + azimuth line
+- [ ] OSM (optional) при наличии сети
+
+Код: `src/modules/map/mapStyles.ts`, `MapPanel.tsx`, `scripts/fetch-offline-tiles.mjs`.
