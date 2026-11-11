@@ -1,15 +1,24 @@
 /**
  * Download dark basemap tiles into public/tiles for offline MapLibre.
- * Source: Carto Dark Matter (raster). For bundling into desktop app only.
+ * Source: Esri World Dark Gray Base (no API key; free for bundling offline).
+ * Note: Carto basemaps.cartocdn.com now returns "API KEY REQUIRED" watermarks.
  *
  * Coverage:
  *  - World overview z0–z4
  *  - Central Russia (incl. Smolensk Oblast) z5–z11
  *  - Smolensk Oblast detail z12
  *
+ * Esri tile path is {z}/{y}/{x}; we store locally as {z}/{x}/{y}.png|.jpg
+ *
  * Usage: node scripts/fetch-offline-tiles.mjs
  */
-import { createWriteStream, existsSync, mkdirSync } from "node:fs";
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
@@ -17,10 +26,10 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(ROOT, "public", "tiles");
+/** Esri uses z/y/x order. */
 const TEMPLATE =
-  "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png";
+  "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}";
 
-/** Central Federal District envelope — west edge covers Smolensk Oblast. */
 const CENTRAL_RUSSIA = {
   west: 30.5,
   south: 51.0,
@@ -28,13 +37,15 @@ const CENTRAL_RUSSIA = {
   north: 58.5,
 };
 
-/** Smolensk Oblast (область) — higher zoom detail. */
 const SMOLENSK_OBLAST = {
   west: 30.7,
   south: 53.7,
   east: 35.5,
   north: 56.05,
 };
+
+/** Tiny watermark / placeholder tiles from previous Carto fetch (~2513 B). */
+const MIN_VALID_BYTES = 4000;
 
 function lon2tile(lon, z) {
   return Math.floor(((lon + 180) / 360) * 2 ** z);
@@ -46,13 +57,25 @@ function lat2tile(lat, z) {
   );
 }
 
-async function fetchTile(z, x, y, retries = 3) {
+function destPath(z, x, y, ext = "jpg") {
+  return join(OUT, String(z), String(x), `${y}.${ext}`);
+}
+
+async function fetchTile(z, x, y, retries = 4) {
+  // Prefer jpg (Esri), keep png path for MapLibre template flexibility
+  const jpg = destPath(z, x, y, "jpg");
+  const png = destPath(z, x, y, "png");
+  for (const p of [jpg, png]) {
+    if (existsSync(p)) {
+      const { size } = await import("node:fs").then((fs) => fs.statSync(p));
+      if (size >= MIN_VALID_BYTES) return "skip";
+      unlinkSync(p);
+    }
+  }
+  mkdirSync(dirname(jpg), { recursive: true });
   const url = TEMPLATE.replace("{z}", z)
-    .replace("{x}", x)
-    .replace("{y}", y);
-  const dest = join(OUT, String(z), String(x), `${y}.png`);
-  if (existsSync(dest)) return "skip";
-  mkdirSync(dirname(dest), { recursive: true });
+    .replace("{y}", y)
+    .replace("{x}", x);
   let lastErr;
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
@@ -60,6 +83,9 @@ async function fetchTile(z, x, y, retries = 3) {
         headers: { "User-Agent": "AetherGroundStation/1.0 (offline bundle)" },
       });
       if (!res.ok) throw new Error(`${res.status} ${url}`);
+      const ctype = res.headers.get("content-type") || "";
+      const ext = ctype.includes("png") ? "png" : "jpg";
+      const dest = destPath(z, x, y, ext);
       await pipeline(Readable.fromWeb(res.body), createWriteStream(dest));
       return "ok";
     } catch (e) {
@@ -70,7 +96,7 @@ async function fetchTile(z, x, y, retries = 3) {
   throw lastErr;
 }
 
-async function downloadSet(list, concurrency = 12) {
+async function downloadSet(list, concurrency = 14) {
   let i = 0;
   let ok = 0;
   let skip = 0;
@@ -135,10 +161,42 @@ const jobs = [
 const key = (t) => `${t.z}/${t.x}/${t.y}`;
 const uniq = [...new Map(jobs.map((t) => [key(t), t])).values()];
 console.log(
-  `Central Russia + Smolensk: fetching ${uniq.length} tiles into public/tiles …`,
+  `Esri Dark Gray · Central Russia + Smolensk: ${uniq.length} tiles → public/tiles`,
 );
+
+// Wipe known-bad Carto watermark PNGs (identical ~2513 B)
+console.log("Removing invalid watermark tiles (<4KB)…");
+{
+  const { readdirSync, statSync } = await import("node:fs");
+  function walk(dir) {
+    for (const name of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, name.name);
+      if (name.isDirectory()) walk(p);
+      else if (/\.(png|jpg|jpeg)$/i.test(name.name)) {
+        if (statSync(p).size < MIN_VALID_BYTES) unlinkSync(p);
+      }
+    }
+  }
+  if (existsSync(OUT)) walk(OUT);
+}
+
 const result = await downloadSet(uniq);
 if (result.fail > 0) {
-  console.log("Retrying failed tiles once…");
+  console.log("Retrying failed tiles…");
   await downloadSet(uniq, 8);
 }
+
+writeFileSync(
+  join(OUT, "manifest.json"),
+  JSON.stringify(
+    {
+      source: "Esri World Dark Gray Base",
+      templateLocal: "/tiles/{z}/{x}/{y}.jpg",
+      coverage: { centralRussia: CENTRAL_RUSSIA, smolenskOblast: SMOLENSK_OBLAST },
+      tileCount: uniq.length,
+      fetchedAt: new Date().toISOString(),
+    },
+    null,
+    2,
+  ),
+);

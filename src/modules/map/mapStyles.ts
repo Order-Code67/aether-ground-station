@@ -1,7 +1,7 @@
 import type { StyleSpecification } from "maplibre-gl";
 
-/** Bundled offline dark tiles (public/tiles) — no network required. */
-export const BUNDLED_OFFLINE_TILES = "/tiles/{z}/{x}/{y}.png";
+/** Bundled offline dark tiles (public/tiles) — Esri World Dark Gray, no network. */
+export const BUNDLED_OFFLINE_TILES = "/tiles/{z}/{x}/{y}.jpg";
 
 /** Bundled Terrarium DEM (public/dem-tiles) for MapLibre 3D terrain. */
 export const BUNDLED_DEM_TILES = "/dem-tiles/{z}/{x}/{y}.png";
@@ -48,8 +48,9 @@ export function offlineStyle(
           type: "raster",
           tiles: [template],
           tileSize: 256,
-          attribution: "Aether offline · Центральная Россия",
+          attribution: "Aether offline · Esri Dark Gray · Центральная Россия",
           maxzoom: 12,
+          scheme: "xyz",
         },
       },
       layers: [

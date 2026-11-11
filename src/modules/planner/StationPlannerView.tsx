@@ -5,9 +5,8 @@ import { StationCard } from "./StationCard";
 import { EngineeringStrip } from "./EngineeringStrip";
 
 /**
- * GS-3 unified 4-pane Station Planner:
- * tree | map | station card
- * ---------------- engineering (terrain + pan-tilt + 3D)
+ * GS-3 Station Planner — map-first layout (mockup-aligned):
+ * full-bleed map + floating glass side panels + bottom engineering strip.
  */
 export function StationPlannerView() {
   const treeCollapsed = useStationPlannerStore((s) => s.treeCollapsed);
@@ -23,51 +22,56 @@ export function StationPlannerView() {
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col bg-ags-bg"
+      className="relative flex h-full min-h-0 flex-col bg-ags-bg"
       data-testid="station-planner"
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-ags-border-subtle bg-ags-surface/80 px-3 py-1.5 text-[10px] backdrop-blur-sm">
-        <span className="font-semibold uppercase tracking-[0.14em] text-ags-accent">
-          Station Planner
-        </span>
-        <button
-          type="button"
-          className="rounded border border-ags-border px-1.5 py-0.5"
-          onClick={() => setTreeCollapsed(!treeCollapsed)}
-        >
-          {treeCollapsed ? "Дерево ▸" : "Дерево ▾"}
-        </button>
-        <button
-          type="button"
-          className="rounded border border-ags-border px-1.5 py-0.5"
-          onClick={() => setCardCollapsed(!cardCollapsed)}
-        >
-          {cardCollapsed ? "Карточка ▸" : "Карточка ▾"}
-        </button>
-        <button
-          type="button"
-          className="rounded border border-ags-border px-1.5 py-0.5"
-          onClick={() => setEngineeringCollapsed(!engineeringCollapsed)}
-        >
-          {engineeringCollapsed ? "Инженерия ▸" : "Инженерия ▾"}
-        </button>
-      </div>
+      <div className="relative min-h-0 flex-1">
+        <MapPanel plannerMode />
 
-      <div className="flex min-h-0 flex-1">
-        {!treeCollapsed && (
-          <aside
-            className="w-56 shrink-0 border-r border-ags-border-subtle bg-ags-panel"
-            aria-label="Дерево объектов"
-          >
-            <PlannerTree />
-          </aside>
-        )}
-        <div className="relative min-w-0 flex-1">
-          <MapPanel plannerMode />
+        {/* Left glass: object tree */}
+        <div className="pointer-events-none absolute bottom-3 left-3 top-14 z-20 flex flex-col gap-2">
+          <div className="pointer-events-auto flex gap-1">
+            <button
+              type="button"
+              className="ags-glass-btn"
+              onClick={() => setTreeCollapsed(!treeCollapsed)}
+            >
+              {treeCollapsed ? "Объекты ▸" : "Объекты ▾"}
+            </button>
+            <button
+              type="button"
+              className="ags-glass-btn"
+              onClick={() => setCardCollapsed(!cardCollapsed)}
+            >
+              {cardCollapsed ? "Карточка ▸" : "Карточка ▾"}
+            </button>
+            <button
+              type="button"
+              className="ags-glass-btn"
+              onClick={() => setEngineeringCollapsed(!engineeringCollapsed)}
+            >
+              {engineeringCollapsed ? "Инженерия ▸" : "Инженерия ▾"}
+            </button>
+          </div>
+          {!treeCollapsed && (
+            <aside
+              className="ags-glass-panel pointer-events-auto w-56 overflow-hidden"
+              aria-label="Дерево объектов"
+            >
+              <div className="border-b border-white/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-ags-accent">
+                Объекты комплекса
+              </div>
+              <div className="max-h-[min(52vh,28rem)] overflow-auto">
+                <PlannerTree />
+              </div>
+            </aside>
+          )}
         </div>
+
+        {/* Right glass: station card */}
         {!cardCollapsed && (
           <aside
-            className="w-64 shrink-0 border-l border-ags-border-subtle bg-ags-panel"
+            className="ags-glass-panel pointer-events-auto absolute bottom-3 right-3 top-14 z-20 w-64 overflow-auto"
             aria-label="Карточка станции"
           >
             <StationCard />
@@ -77,7 +81,7 @@ export function StationPlannerView() {
 
       {!engineeringCollapsed && (
         <div
-          className="h-56 shrink-0 border-t border-ags-border-subtle bg-ags-panel"
+          className="z-10 h-52 shrink-0 border-t border-ags-border-subtle bg-ags-panel/95 backdrop-blur-md"
           aria-label="Инженерная панель"
         >
           <EngineeringStrip />

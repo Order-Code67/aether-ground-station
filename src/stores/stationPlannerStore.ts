@@ -104,7 +104,7 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
   lookAt: null,
   pickLookAt: false,
   treeCollapsed: false,
-  cardCollapsed: false,
+  cardCollapsed: true,
   engineeringCollapsed: false,
 
   refresh: async () => {

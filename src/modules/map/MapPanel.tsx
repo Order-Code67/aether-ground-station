@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import "./maplibreWorker";
 import {
   Map,
   Marker,
@@ -421,60 +422,57 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     );
   }
 
+  const toolBtn = (active: boolean) =>
+    active
+      ? "ags-glass-btn ags-glass-btn--active"
+      : "ags-glass-btn";
+
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex flex-wrap gap-2 border-b border-ags-border-subtle p-2 text-xs">
+    <div className="relative h-full min-h-0 w-full overflow-hidden bg-ags-bg">
+      <div ref={containerRef} className="absolute inset-0" />
+
+      {/* Floating glass toolbar — mockup-style map-first chrome */}
+      <div className="ags-glass-bar pointer-events-auto absolute left-3 top-3 z-10 flex max-w-[min(92%,42rem)] flex-wrap items-center gap-1.5 p-1.5 text-[11px]">
         <select
-          className="rounded border border-ags-border bg-ags-elevated px-2 py-1"
+          className="ags-select !rounded-md !py-1 !text-[11px]"
           value={tileMode}
           onChange={(e) => setTileMode(e.target.value as TileMode)}
+          aria-label="Источник тайлов"
         >
-          <option value="offline">Офлайн (встроенные)</option>
+          <option value="offline">Офлайн</option>
           <option value="local">Локальные XYZ</option>
           <option value="osm">OSM онлайн</option>
         </select>
         {tileMode === "local" && (
           <input
-            className="min-w-[14rem] flex-1 rounded border border-ags-border bg-ags-elevated px-2 py-1"
-            placeholder="/tiles/{z}/{x}/{y}.png"
+            className="ags-select min-w-[10rem] flex-1 !rounded-md !py-1"
+            placeholder="/tiles/{z}/{x}/{y}.jpg"
             value={localUrl}
             onChange={(e) => setLocalUrl(e.target.value)}
           />
         )}
-        <button
-          type="button"
-          className="rounded border border-ags-border px-2 py-1"
-          onClick={addMarkerHere}
-        >
-          Метка в центре
+        <button type="button" className={toolBtn(false)} onClick={addMarkerHere}>
+          Метка
         </button>
         <button
           type="button"
-          className="rounded border border-ags-border px-2 py-1"
+          className={toolBtn(measureMode)}
           onClick={() => setMeasureMode((v) => !v)}
         >
-          {measureMode ? "Завершить измерение" : "Измерить расстояние"}
+          {measureMode ? "Стоп линейка" : "Линейка"}
         </button>
         {plannerMode && (
           <button
             type="button"
-            className={
-              pickLookAt
-                ? "rounded bg-ags-accent px-2 py-1 text-white"
-                : "rounded border border-ags-border px-2 py-1"
-            }
+            className={toolBtn(pickLookAt)}
             onClick={() => setPickLookAt(!pickLookAt)}
           >
-            {pickLookAt ? "Клик: точка B…" : "Точка наблюдения B"}
+            {pickLookAt ? "Клик: B…" : "Точка B"}
           </button>
         )}
         <button
           type="button"
-          className={
-            terrain
-              ? "rounded bg-ags-accent px-2 py-1 text-white"
-              : "rounded border border-ags-border px-2 py-1"
-          }
+          className={toolBtn(terrain)}
           onClick={() => {
             setTerrain((v) => !v);
             eventBus.emit(
@@ -486,15 +484,14 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
             );
           }}
         >
-          3D рельеф {terrain ? "вкл" : "выкл"}
+          3D рельеф
         </button>
         {distanceM != null && (
-          <span className="text-ags-muted">
-            Дистанция: {(distanceM / 1000).toFixed(3)} км
+          <span className="px-1.5 font-mono text-ags-fg">
+            {(distanceM / 1000).toFixed(3)} км
           </span>
         )}
       </div>
-      <div ref={containerRef} className="min-h-0 flex-1" />
     </div>
   );
 }
