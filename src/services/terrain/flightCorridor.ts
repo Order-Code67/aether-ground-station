@@ -44,7 +44,7 @@ export async function computeFlightCorridor(opts: {
     bearingDeg,
     antennaAmslM,
     rangeLimitM,
-    stepM = 500,
+    stepM = 250,
     tightClearanceM = 30,
   } = opts;
   const maxM = Math.max(500, rangeLimitM);

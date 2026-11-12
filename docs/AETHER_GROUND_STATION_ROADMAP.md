@@ -17,15 +17,18 @@
 | **GS-0** | Product Audit & UX Blueprint | Low | — |
 | **GS-1** | Dashboard & Navigation (chrome) | Medium | **DONE** — TopBar complex/site, StatusBar last-update, Dashboard planner summary |
 | **GS-2** | Complex & Site Manager | Medium | **Каркас DONE** (schema v5 CRUD) |
-| **GS-3** | Station Planner | Medium–High | **DONE wave-2** — 4-pane `StationPlannerView` |
-| **GS-4** | Mast & Antenna Manager | Medium | **Каркас DONE** |
-| **GS-5** | Terrain Engine | Medium | **DONE wave-2** az-coupled A→B; **gap:** 3D DEM mesh |
-| **GS-6** | Device Manager hub UX | Medium | **Каркас DONE** |
+| **GS-3** | Station Planner | Medium–High | **DONE** + aiming (патчи/коридор/пресеты) |
+| **GS-4** | Mast & Antenna Manager | Medium | **Каркас**; beamwidth→патчи |
+| **GS-5** | Terrain Engine | Medium | **DONE** az-coupled + denser corridor; mesh gap |
+| **GS-6** | Device Manager hub UX | Medium | **Каркас DONE** — следующий UX-этап |
 | **GS-7** | Video Center | High (HW) | **Каркас**; HW lab separate |
 | **GS-8** | Telemetry Center | Medium | **Каркас** |
 | **GS-9** | Event Center & Diagnostics | Low–Medium | **Каркас DONE** |
 | **GS-10** | Workspace & Integration | Medium | **Каркас**; полная §15 — backlog |
-| **GS-PT** | Pan-Tilt visualization | High | **DONE wave-2** sim+3D+map sync; **gap:** HW adapter |
+| **GS-PT** | Pan-Tilt visualization | High | Sim+3D+map; **COM read**; write после OK |
+
+Порядок: pan-tilt read → пресеты → Device hub → Video → Telemetry → GS-10.  
+Процесс: `docs/AETHER_DEV_PROCESS.md`.
 
 GS-6/7/8 могут частично идти параллельно после GS-1 **только** если не ломают shared `ModuleId` / DeviceManager.
 

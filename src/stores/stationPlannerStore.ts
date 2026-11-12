@@ -7,6 +7,10 @@ import {
   upsertComplex,
   upsertSite,
 } from "@/services/complexes";
+import {
+  listAntennaMounts,
+  listAntennaProfiles,
+} from "@/services/catalogs";
 import { listStations, upsertStation } from "@/services/stations";
 import { clampAngle, destinationPoint } from "@/utils/geo";
 
@@ -95,6 +99,19 @@ interface PlannerState {
   setMastHeightM: (m: number) => Promise<void>;
   /** Move active station to lat/lng (working point). */
   moveActiveStation: (lat: number, lng: number) => Promise<void>;
+  /** Apply saved aiming preset (point, AZ/EL, range, patches, mast). */
+  applyAimingPreset: (p: {
+    latitude: number;
+    longitude: number;
+    azimuthDeg: number;
+    elevationDeg: number;
+    rangeKm: number;
+    videoPatchDeg: number;
+    controlPatchDeg: number;
+    mastHeightM: number;
+  }) => Promise<void>;
+  /** Pull beamwidthDeg from station antenna mounts — no invented RF. */
+  applyPatchesFromCatalog: () => Promise<string>;
   /** Rebuild look-at B from active station + sim azimuth (keeps distance). */
   syncLookAtFromAzimuth: () => void;
   setTreeCollapsed: (v: boolean) => void;
@@ -296,6 +313,71 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
     if (!st) return;
     await get().saveStation({ ...st, latitude: lat, longitude: lng });
     get().syncLookAtFromAzimuth();
+  },
+
+  applyAimingPreset: async (p) => {
+    const { activeStationId, stations, panTiltRanges } = get();
+    const st = stations.find((s) => s.id === activeStationId);
+    set({
+      simAzimuthDeg: clampAngle(
+        p.azimuthDeg,
+        panTiltRanges.azMin,
+        panTiltRanges.azMax,
+      ),
+      simElevationDeg: clampAngle(
+        p.elevationDeg,
+        panTiltRanges.elMin,
+        panTiltRanges.elMax,
+      ),
+      rangeKm: Math.min(300, Math.max(1, p.rangeKm)),
+      videoPatchDeg: Math.min(180, Math.max(5, p.videoPatchDeg)),
+      controlPatchDeg: Math.min(180, Math.max(5, p.controlPatchDeg)),
+    });
+    if (st) {
+      await get().saveStation({
+        ...st,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        mastHeightM: p.mastHeightM,
+        azimuthDeg: p.azimuthDeg,
+        elevationDeg: p.elevationDeg,
+      });
+      get().syncLookAtFromAzimuth();
+    }
+  },
+
+  applyPatchesFromCatalog: async () => {
+    const { activeStationId } = get();
+    if (!activeStationId) return "Станция не выбрана";
+    const [mounts, antennas] = await Promise.all([
+      listAntennaMounts(activeStationId),
+      listAntennaProfiles(),
+    ]);
+    const byId = new Map(antennas.map((a) => [a.id, a]));
+    const beams: { label: string; deg: number }[] = [];
+    for (const m of mounts) {
+      if (!m.antennaProfileId) continue;
+      const a = byId.get(m.antennaProfileId);
+      if (a?.beamwidthDeg == null || Number.isNaN(a.beamwidthDeg)) continue;
+      beams.push({
+        label: (m.label ?? a.name ?? "").toLowerCase(),
+        deg: a.beamwidthDeg,
+      });
+    }
+    if (!beams.length) {
+      return "В каталоге нет beamwidthDeg у антенн этой станции (Н/Д)";
+    }
+    const video =
+      beams.find((b) => /video|вид|патч.?в/i.test(b.label)) ?? beams[0]!;
+    const control =
+      beams.find((b) => /control|управ|rc|команд/i.test(b.label)) ??
+      (beams.length > 1 ? beams[1]! : null);
+    set({ videoPatchDeg: Math.min(180, Math.max(5, video.deg)) });
+    if (control) {
+      set({ controlPatchDeg: Math.min(180, Math.max(5, control.deg)) });
+      return `Патчи из каталога: видео ${video.deg}° · управление ${control.deg}°`;
+    }
+    return `Патч видео из каталога: ${video.deg}° (управление без beamwidth — не менялся)`;
   },
 
   syncLookAtFromAzimuth: () => {

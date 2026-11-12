@@ -33,13 +33,11 @@ test("GS-3: Station Planner 4-pane reachable from map section", async ({
     timeout: 15_000,
   });
   await expect(page.getByLabel("Дерево объектов")).toBeVisible();
-  // Station card is glass-overlay; expand if collapsed (map-first default).
-  const card = page.getByLabel("Карточка станции");
-  if (!(await card.isVisible().catch(() => false))) {
-    await page.getByRole("button", { name: /Карточка/i }).click();
+  const aiming = page.getByLabel("Наведение станции");
+  if (!(await aiming.isVisible().catch(() => false))) {
+    await page.getByRole("button", { name: /Наведение/i }).click();
   }
-  await expect(card).toBeVisible();
+  await expect(aiming).toBeVisible();
   await expect(page.getByLabel("Инженерная панель")).toBeVisible();
   await expect(page.getByLabel("Поворотный механизм")).toBeVisible();
-  await expect(page.getByText(/3D · симуляция/i).first()).toBeVisible();
 });

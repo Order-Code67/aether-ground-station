@@ -113,7 +113,7 @@ export function TerrainPanel({
       startLng: sLng,
       endLat: eLat,
       endLng: eLng,
-      steps: compact ? 16 : 24,
+      steps: compact ? 32 : 48,
       antennaCenterAmslM: antennaAmsl,
       sample: (lat, lng) => adapter.sample(lat, lng),
     });
