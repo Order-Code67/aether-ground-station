@@ -53,6 +53,14 @@ interface PlannerState {
   showRangeRing: boolean;
   /** Geometric radio-horizon lobe from DEM (not measured RF). */
   showRadioHorizon: boolean;
+  /** Horizontal beamwidth of video patch (°) — map sector. */
+  videoPatchDeg: number;
+  /** Horizontal beamwidth of control/RC patch (°) — map sector. */
+  controlPatchDeg: number;
+  /** When true, next map click moves active station point A. */
+  pickStationPos: boolean;
+  /** Show DEM flight-corridor clearance along heading. */
+  showFlightCorridor: boolean;
   treeCollapsed: boolean;
   cardCollapsed: boolean;
   engineeringCollapsed: boolean;
@@ -79,6 +87,14 @@ interface PlannerState {
   setRangeKm: (km: number) => void;
   setShowRangeRing: (v: boolean) => void;
   setShowRadioHorizon: (v: boolean) => void;
+  setVideoPatchDeg: (deg: number) => void;
+  setControlPatchDeg: (deg: number) => void;
+  setPickStationPos: (v: boolean) => void;
+  setShowFlightCorridor: (v: boolean) => void;
+  /** Manual mast height (m) — persists on active station, updates AMSL / corridor. */
+  setMastHeightM: (m: number) => Promise<void>;
+  /** Move active station to lat/lng (working point). */
+  moveActiveStation: (lat: number, lng: number) => Promise<void>;
   /** Rebuild look-at B from active station + sim azimuth (keeps distance). */
   syncLookAtFromAzimuth: () => void;
   setTreeCollapsed: (v: boolean) => void;
@@ -114,8 +130,12 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
   rangeKm: 40,
   showRangeRing: true,
   showRadioHorizon: true,
+  videoPatchDeg: 60,
+  controlPatchDeg: 90,
+  pickStationPos: false,
+  showFlightCorridor: true,
   treeCollapsed: false,
-  cardCollapsed: true,
+  cardCollapsed: false,
   engineeringCollapsed: false,
 
   refresh: async () => {
@@ -234,7 +254,8 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
 
   setLookAt: (p) => set({ lookAt: p, pickLookAt: false }),
 
-  setPickLookAt: (v) => set({ pickLookAt: v }),
+  setPickLookAt: (v) =>
+    set({ pickLookAt: v, pickStationPos: v ? false : get().pickStationPos }),
 
   setRangeKm: (km) =>
     set({ rangeKm: Math.min(300, Math.max(1, Number.isFinite(km) ? km : 40)) }),
@@ -242,6 +263,40 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
   setShowRangeRing: (v) => set({ showRangeRing: v }),
 
   setShowRadioHorizon: (v) => set({ showRadioHorizon: v }),
+
+  setVideoPatchDeg: (deg) =>
+    set({
+      videoPatchDeg: Math.min(180, Math.max(5, Number.isFinite(deg) ? deg : 60)),
+    }),
+
+  setControlPatchDeg: (deg) =>
+    set({
+      controlPatchDeg: Math.min(
+        180,
+        Math.max(5, Number.isFinite(deg) ? deg : 90),
+      ),
+    }),
+
+  setPickStationPos: (v) =>
+    set({ pickStationPos: v, pickLookAt: v ? false : get().pickLookAt }),
+
+  setShowFlightCorridor: (v) => set({ showFlightCorridor: v }),
+
+  setMastHeightM: async (m) => {
+    const { activeStationId, stations } = get();
+    const st = stations.find((s) => s.id === activeStationId);
+    if (!st) return;
+    const height = Math.min(120, Math.max(1, Number.isFinite(m) ? m : 15));
+    await get().saveStation({ ...st, mastHeightM: height });
+  },
+
+  moveActiveStation: async (lat, lng) => {
+    const { activeStationId, stations } = get();
+    const st = stations.find((s) => s.id === activeStationId);
+    if (!st) return;
+    await get().saveStation({ ...st, latitude: lat, longitude: lng });
+    get().syncLookAtFromAzimuth();
+  },
 
   syncLookAtFromAzimuth: () => {
     const { activeStationId, stations, simAzimuthDeg, lookAt } = get();

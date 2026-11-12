@@ -83,36 +83,43 @@ export function PanTiltPanel({ compact = false }: { compact?: boolean }) {
   const displayAz = mode === "simulation" ? az : factAz;
   const displayEl = mode === "simulation" ? el : factEl;
 
+  // Compact strip: always drive sim servos (map + 3D). Full panel keeps modes.
+  useEffect(() => {
+    if (compact && mode !== "simulation") setMode("simulation");
+  }, [compact, mode, setMode]);
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 overflow-auto p-2 text-sm">
       {!compact && (
         <p className="text-[10px] text-ags-muted">
-          Удалённое управление приводами не реализуется. Simulation меняет только
-          виртуальную модель, карту и профиль.
+          Локальная симуляция серво: углы на карте и 3D. Удалённые команды на
+          железо не отправляются.
         </p>
       )}
-      <div className="flex flex-wrap gap-1">
-        {(
-          [
-            ["simulation", "Симуляция"],
-            ["monitoring", "Мониторинг"],
-            ["local-status", "Лок. статус"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={
-              mode === id
-                ? "rounded bg-ags-accent px-2 py-0.5 text-xs text-white"
-                : "rounded border border-ags-border px-2 py-0.5 text-xs"
-            }
-            onClick={() => setMode(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {!compact && (
+        <div className="flex flex-wrap gap-1">
+          {(
+            [
+              ["simulation", "Симуляция"],
+              ["monitoring", "Мониторинг"],
+              ["local-status", "Лок. статус"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={
+                mode === id
+                  ? "rounded bg-ags-accent px-2 py-0.5 text-xs text-white"
+                  : "rounded border border-ags-border px-2 py-0.5 text-xs"
+              }
+              onClick={() => setMode(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-start gap-3">
         <AzimuthCompass az={displayAz ?? 0} />
@@ -134,10 +141,10 @@ export function PanTiltPanel({ compact = false }: { compact?: boolean }) {
         </dl>
       </div>
 
-      {mode === "simulation" && (
+      {(mode === "simulation" || compact) && (
         <div className="space-y-2">
           <label className="block text-xs text-ags-muted">
-            Азимут ({ranges.azMin}…{ranges.azMax}°)
+            Серво AZ ({ranges.azMin}…{ranges.azMax}°)
             <div className="mt-1 flex items-center gap-2">
               <input
                 type="range"
@@ -162,7 +169,7 @@ export function PanTiltPanel({ compact = false }: { compact?: boolean }) {
             </div>
           </label>
           <label className="block text-xs text-ags-muted">
-            Угол места ({ranges.elMin}…{ranges.elMax}°) — вверх поднимает
+            Серво EL ({ranges.elMin}…{ranges.elMax}°) — вверх поднимает
             <div className="mt-1 flex items-end gap-3">
               <div className="flex h-28 flex-col items-center gap-1">
                 <span className="text-[9px] text-ags-dim">{ranges.elMax}°</span>

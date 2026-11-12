@@ -32,8 +32,14 @@ import {
   computeRadioHorizon,
   type HorizonResult,
 } from "@/services/terrain/radioHorizon";
+import {
+  computeFlightCorridor,
+  sectorPolygon,
+  type CorridorResult,
+} from "@/services/terrain/flightCorridor";
 import { getTerrainAdapter } from "@/services/terrain/terrainEngine";
 import { destinationPoint } from "@/utils/geo";
+import { calcAntennaCenterAmsl } from "@/services/stations";
 
 interface UserMarker {
   id: string;
@@ -92,13 +98,18 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const simAzimuthDeg = useStationPlannerStore((s) => s.simAzimuthDeg);
   const lookAt = useStationPlannerStore((s) => s.lookAt);
   const pickLookAt = useStationPlannerStore((s) => s.pickLookAt);
+  const pickStationPos = useStationPlannerStore((s) => s.pickStationPos);
   const setLookAt = useStationPlannerStore((s) => s.setLookAt);
-  const setPickLookAt = useStationPlannerStore((s) => s.setPickLookAt);
+  const setPickStationPos = useStationPlannerStore((s) => s.setPickStationPos);
+  const moveActiveStation = useStationPlannerStore((s) => s.moveActiveStation);
   const setSimAzimuthDeg = useStationPlannerStore((s) => s.setSimAzimuthDeg);
   const plannerStations = useStationPlannerStore((s) => s.stations);
   const rangeKm = useStationPlannerStore((s) => s.rangeKm);
   const showRangeRing = useStationPlannerStore((s) => s.showRangeRing);
   const showRadioHorizon = useStationPlannerStore((s) => s.showRadioHorizon);
+  const videoPatchDeg = useStationPlannerStore((s) => s.videoPatchDeg);
+  const controlPatchDeg = useStationPlannerStore((s) => s.controlPatchDeg);
+  const showFlightCorridor = useStationPlannerStore((s) => s.showFlightCorridor);
   const setRangeKm = useStationPlannerStore((s) => s.setRangeKm);
   const setShowRangeRing = useStationPlannerStore((s) => s.setShowRangeRing);
   const setShowRadioHorizon = useStationPlannerStore(
@@ -108,6 +119,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const [measureMode, setMeasureMode] = useState(false);
   const [labelsOn, setLabelsOn] = useState(true);
   const [horizon, setHorizon] = useState<HorizonResult | null>(null);
+  const [corridor, setCorridor] = useState<CorridorResult | null>(null);
   const [measureA, setMeasureA] = useState<{
     lng: number;
     lat: number;
@@ -122,6 +134,8 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   measureModeRef.current = measureMode;
   const pickLookAtRef = useRef(pickLookAt);
   pickLookAtRef.current = pickLookAt;
+  const pickStationPosRef = useRef(pickStationPos);
+  pickStationPosRef.current = pickStationPos;
 
   const zMax = tileMode === "osm" ? MAX_Z_OSM : MAX_Z_OFFLINE;
   const tileTpl = templateFor(tileMode, localUrl);
@@ -192,6 +206,28 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const displayStations = plannerMode ? plannerStations : stations;
   const active = displayStations.find((s) => s.id === activeStationId);
 
+  // Resolve antenna AMSL from mast + DEM when stored AMSL missing.
+  const resolveAntennaAmsl = useCallback(async (st: Station) => {
+    const mast = st.mastHeightM ?? 15;
+    const fromParts = calcAntennaCenterAmsl(
+      st.terrainElevationM,
+      mast,
+      st.antennaOffsetM,
+    );
+    if (fromParts != null) return { antennaAmsl: fromParts, mast };
+    if (st.antennaCenterAmslM != null) {
+      return { antennaAmsl: st.antennaCenterAmslM, mast };
+    }
+    const s = await getTerrainAdapter().sample(st.latitude, st.longitude);
+    if (s.elevationM != null) {
+      return {
+        antennaAmsl: s.elevationM + mast + (st.antennaOffsetM ?? 0),
+        mast,
+      };
+    }
+    return { antennaAmsl: null as number | null, mast };
+  }, []);
+
   // Geometric radio-horizon lobe (DEM) — capped by operator range.
   useEffect(() => {
     if (!showRadioHorizon || !active) {
@@ -200,15 +236,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     }
     let cancelled = false;
     void (async () => {
-      const mast = active.mastHeightM ?? 15;
-      let antennaAmsl = active.antennaCenterAmslM ?? null;
-      if (antennaAmsl == null) {
-        const s = await getTerrainAdapter().sample(
-          active.latitude,
-          active.longitude,
-        );
-        if (s.elevationM != null) antennaAmsl = s.elevationM + mast;
-      }
+      const { antennaAmsl, mast } = await resolveAntennaAmsl(active);
       const result = await computeRadioHorizon({
         lat: active.latitude,
         lng: active.longitude,
@@ -222,13 +250,40 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
       cancelled = true;
     };
   }, [
-    active?.id,
-    active?.latitude,
-    active?.longitude,
-    active?.mastHeightM,
-    active?.antennaCenterAmslM,
+    active,
     rangeKm,
     showRadioHorizon,
+    resolveAntennaAmsl,
+  ]);
+
+  // DEM flight corridor along heading — updates when mast / AZ / range change.
+  useEffect(() => {
+    if (!plannerMode || !showFlightCorridor || !active) {
+      setCorridor(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { antennaAmsl } = await resolveAntennaAmsl(active);
+      const result = await computeFlightCorridor({
+        lat: active.latitude,
+        lng: active.longitude,
+        bearingDeg: ((simAzimuthDeg % 360) + 360) % 360,
+        antennaAmslM: antennaAmsl,
+        rangeLimitM: rangeKm * 1000,
+      });
+      if (!cancelled) setCorridor(result);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    active,
+    plannerMode,
+    rangeKm,
+    resolveAntennaAmsl,
+    showFlightCorridor,
+    simAzimuthDeg,
   ]);
 
   const project = useCallback(
@@ -406,6 +461,14 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     const sy = e.clientY - rect.top;
     const { lon, lat } = unproject(sx, sy);
 
+    if (pickStationPosRef.current) {
+      void moveActiveStation(lat, lon).then(() => {
+        setPickStationPos(false);
+        eventBus.emit("info", "map", "Точка станции задана");
+      });
+      return;
+    }
+
     if (pickLookAtRef.current) {
       const state = useStationPlannerStore.getState();
       const st = state.stations.find((s) => s.id === state.activeStationId);
@@ -420,7 +483,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         signed = Math.min(azMax, Math.max(azMin, signed));
         setSimAzimuthDeg(signed);
       }
-      eventBus.emit("info", "map", "Точка наблюдения B задана");
+      eventBus.emit("info", "map", "Направление полёта задано");
       return;
     }
 
@@ -495,6 +558,53 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     return `${pts.join(" ")} Z`;
   }, [horizon, project, size.w]);
 
+  const controlSectorPath = useMemo(() => {
+    if (!plannerMode || !active || size.w <= 0) return null;
+    return sectorPolygon(
+      active.latitude,
+      active.longitude,
+      ((simAzimuthDeg % 360) + 360) % 360,
+      controlPatchDeg / 2,
+      rangeKm * 1000,
+      (lon, lat) => project(lon, lat),
+    );
+  }, [
+    active,
+    controlPatchDeg,
+    plannerMode,
+    project,
+    rangeKm,
+    simAzimuthDeg,
+    size.w,
+  ]);
+
+  const videoSectorPath = useMemo(() => {
+    if (!plannerMode || !active || size.w <= 0) return null;
+    return sectorPolygon(
+      active.latitude,
+      active.longitude,
+      ((simAzimuthDeg % 360) + 360) % 360,
+      videoPatchDeg / 2,
+      rangeKm * 1000,
+      (lon, lat) => project(lon, lat),
+    );
+  }, [
+    active,
+    plannerMode,
+    project,
+    rangeKm,
+    simAzimuthDeg,
+    size.w,
+    videoPatchDeg,
+  ]);
+
+  const corridorStroke = (status: string) => {
+    if (status === "clear") return "#5ad4a0";
+    if (status === "tight") return "#f0c14a";
+    if (status === "blocked") return "#e85d5d";
+    return "#8899aa";
+  };
+
   return (
     <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#0b1018]">
       <div
@@ -542,37 +652,100 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           />
         ))}
 
-        {/* Range / radio-horizon / azimuth */}
+        {/* Range / patches / horizon / corridor / azimuth */}
         <svg className="pointer-events-none absolute inset-0 z-[3] h-full w-full">
           {rangeRingPath && (
             <path
               d={rangeRingPath}
-              fill="rgba(61,139,253,0.08)"
+              fill="rgba(61,139,253,0.06)"
               stroke="#3d8bfd"
               strokeWidth={1.5}
               strokeDasharray="8 6"
             />
           )}
+          {controlSectorPath && (
+            <path
+              d={controlSectorPath}
+              fill="rgba(240,193,74,0.12)"
+              stroke="#f0c14a"
+              strokeWidth={1.25}
+              strokeOpacity={0.85}
+            />
+          )}
+          {videoSectorPath && (
+            <path
+              d={videoSectorPath}
+              fill="rgba(61,139,253,0.16)"
+              stroke="#3d8bfd"
+              strokeWidth={1.5}
+            />
+          )}
           {horizonPath && (
             <path
               d={horizonPath}
-              fill="rgba(90,212,160,0.18)"
+              fill="rgba(90,212,160,0.14)"
               stroke="#5ad4a0"
               strokeWidth={2}
             />
           )}
+          {plannerMode &&
+            active &&
+            corridor?.samples.map((s, i, arr) => {
+              if (i === 0) {
+                const a = project(active.longitude, active.latitude);
+                const b = project(s.lng, s.lat);
+                return (
+                  <line
+                    key={`cor-${i}`}
+                    x1={a.x}
+                    y1={a.y}
+                    x2={b.x}
+                    y2={b.y}
+                    stroke={corridorStroke(s.status)}
+                    strokeWidth={4}
+                    strokeLinecap="round"
+                  />
+                );
+              }
+              const prev = arr[i - 1]!;
+              const a = project(prev.lng, prev.lat);
+              const b = project(s.lng, s.lat);
+              return (
+                <line
+                  key={`cor-${i}`}
+                  x1={a.x}
+                  y1={a.y}
+                  x2={b.x}
+                  y2={b.y}
+                  stroke={corridorStroke(s.status)}
+                  strokeWidth={4}
+                  strokeLinecap="round"
+                />
+              );
+            })}
           {displayStations.map((s) => {
             const useSim = plannerMode && s.id === activeStationId;
             const azDeg = useSim ? simAzimuthDeg : (s.azimuthDeg ?? null);
             if (azDeg == null && !useSim) return null;
-            const dest = destinationByAzimuth(
-              s.longitude,
-              s.latitude,
-              azDeg ?? 0,
-              0.02,
-            );
+            const dest =
+              useSim && active
+                ? destinationPoint(
+                    s.latitude,
+                    s.longitude,
+                    azDeg ?? 0,
+                    rangeKm * 1000,
+                  )
+                : (() => {
+                    const d = destinationByAzimuth(
+                      s.longitude,
+                      s.latitude,
+                      azDeg ?? 0,
+                      0.02,
+                    );
+                    return { lat: d.lat, lng: d.lon };
+                  })();
             const a = project(s.longitude, s.latitude);
-            const b = project(dest.lon, dest.lat);
+            const b = project(dest.lng, dest.lat);
             return (
               <line
                 key={`az-${s.id}`}
@@ -580,9 +753,10 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
                 y1={a.y}
                 x2={b.x}
                 y2={b.y}
-                stroke="#3d8bfd"
-                strokeWidth={2.5}
-                strokeDasharray="6 4"
+                stroke="#ffffff"
+                strokeWidth={2}
+                strokeDasharray="5 4"
+                strokeOpacity={0.9}
               />
             );
           })}
@@ -728,15 +902,6 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         >
           {measureMode ? "Стоп линейка" : "Линейка"}
         </button>
-        {plannerMode && (
-          <button
-            type="button"
-            className={toolBtn(pickLookAt)}
-            onClick={() => setPickLookAt(!pickLookAt)}
-          >
-            {pickLookAt ? "Клик: B…" : "Точка B"}
-          </button>
-        )}
         <button
           type="button"
           className={toolBtn(reliefOn)}
@@ -760,48 +925,38 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         >
           Подписи
         </button>
-        <button
-          type="button"
-          className={toolBtn(showRangeRing)}
-          onClick={() => setShowRangeRing(!showRangeRing)}
-        >
-          Радиус
-        </button>
-        <label className="flex items-center gap-1 text-ags-muted">
-          км
-          <input
-            type="number"
-            className="ags-select w-14 !rounded-md !py-0.5 font-mono"
-            min={1}
-            max={300}
-            step={1}
-            value={rangeKm}
-            onChange={(e) => setRangeKm(Number(e.target.value))}
-            aria-label="Радиус действия км"
-          />
-        </label>
-        <button
-          type="button"
-          className={toolBtn(showRadioHorizon)}
-          disabled={!active}
-          title={
-            active
-              ? "Геометрический радиогоризонт по DEM (k=4/3)"
-              : "Выберите станцию"
-          }
-          onClick={() => {
-            setShowRadioHorizon(!showRadioHorizon);
-            eventBus.emit(
-              "info",
-              "map",
-              showRadioHorizon
-                ? "Радиогоризонт выкл"
-                : "Радиогоризонт: геометрия DEM · не измеренный RF",
-            );
-          }}
-        >
-          Радиогоризонт
-        </button>
+        {!plannerMode && (
+          <>
+            <button
+              type="button"
+              className={toolBtn(showRangeRing)}
+              onClick={() => setShowRangeRing(!showRangeRing)}
+            >
+              Радиус
+            </button>
+            <label className="flex items-center gap-1 text-ags-muted">
+              км
+              <input
+                type="number"
+                className="ags-select w-14 !rounded-md !py-0.5 font-mono"
+                min={1}
+                max={300}
+                step={1}
+                value={rangeKm}
+                onChange={(e) => setRangeKm(Number(e.target.value))}
+                aria-label="Радиус действия км"
+              />
+            </label>
+            <button
+              type="button"
+              className={toolBtn(showRadioHorizon)}
+              disabled={!active}
+              onClick={() => setShowRadioHorizon(!showRadioHorizon)}
+            >
+              Радиогоризонт
+            </button>
+          </>
+        )}
         {distanceM != null && (
           <span className="px-1.5 font-mono text-ags-fg">
             {(distanceM / 1000).toFixed(3)} км
@@ -813,25 +968,39 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         </span>
       </div>
 
-      {(showRangeRing || showRadioHorizon) && (
-        <div className="ags-glass-bar pointer-events-none absolute bottom-3 left-3 z-10 max-w-md px-2 py-1.5 text-[10px] leading-snug text-ags-muted">
-          {showRangeRing && (
+      {(plannerMode || showRangeRing || showRadioHorizon) && (
+        <div className="ags-glass-bar pointer-events-none absolute bottom-3 left-3 z-10 max-w-lg px-2 py-1.5 text-[10px] leading-snug text-ags-muted">
+          {plannerMode && active && (
             <div>
-              Синий пунктир — заданный радиус действия ({rangeKm} км).
+              Жёлтый сектор — патч управления ({controlPatchDeg}°) · синий —
+              видео ({videoPatchDeg}°) · белый пунктир — направление.
+              {corridor
+                ? ` Коридор высот: просвет до ${(corridor.clearToM / 1000).toFixed(1)} км (мачта ${active.mastHeightM ?? 15} м).`
+                : ""}
             </div>
+          )}
+          {showRangeRing && !plannerMode && (
+            <div>Синий пунктир — радиус ({rangeKm} км).</div>
           )}
           {showRadioHorizon && (
             <div>
-              Зелёная зона — геометрический радиогоризонт (k=4/3, DEM)
+              Зелёная зона — геометрический радиогоризонт (DEM)
               {horizon
-                ? ` · горизонт ≤ ${(horizon.geometricMaxM / 1000).toFixed(1)} км`
+                ? ` · ≤ ${(horizon.geometricMaxM / 1000).toFixed(1)} км`
                 : ""}
-              . Не измеренный RF и не прогноз канала.
+              .
             </div>
           )}
           {!active && (
             <div className="text-ags-warning">
-              Выберите станцию (точка А), чтобы считать радиус / горизонт.
+              Выберите станцию, чтобы задать точку и направление.
+            </div>
+          )}
+          {(pickStationPos || pickLookAt) && (
+            <div className="text-ags-accent">
+              {pickStationPos
+                ? "Клик по карте — точка станции."
+                : "Клик по карте — направление полёта."}
             </div>
           )}
         </div>

@@ -1,12 +1,12 @@
 import { MapPanel } from "@/modules/map/MapPanel";
 import { useStationPlannerStore } from "@/stores/stationPlannerStore";
+import { AimingControls } from "./AimingControls";
 import { PlannerTree } from "./PlannerTree";
-import { StationCard } from "./StationCard";
 import { EngineeringStrip } from "./EngineeringStrip";
 
 /**
- * GS-3 Station Planner — map-first layout (mockup-aligned):
- * full-bleed map + floating glass side panels + bottom engineering strip.
+ * GS-3 Station Planner — map-first:
+ * aiming controls (point / heading / patches / mast / servos) + map overlays.
  */
 export function StationPlannerView() {
   const treeCollapsed = useStationPlannerStore((s) => s.treeCollapsed);
@@ -28,7 +28,6 @@ export function StationPlannerView() {
       <div className="relative min-h-0 w-full flex-1">
         <MapPanel plannerMode />
 
-        {/* Left glass: object tree */}
         <div className="pointer-events-none absolute bottom-3 left-3 top-14 z-20 flex flex-col gap-2">
           <div className="pointer-events-auto flex gap-1">
             <button
@@ -43,7 +42,7 @@ export function StationPlannerView() {
               className="ags-glass-btn"
               onClick={() => setCardCollapsed(!cardCollapsed)}
             >
-              {cardCollapsed ? "Карточка ▸" : "Карточка ▾"}
+              {cardCollapsed ? "Наведение ▸" : "Наведение ▾"}
             </button>
             <button
               type="button"
@@ -68,13 +67,15 @@ export function StationPlannerView() {
           )}
         </div>
 
-        {/* Right glass: station card */}
         {!cardCollapsed && (
           <aside
-            className="ags-glass-panel pointer-events-auto absolute bottom-3 right-3 top-14 z-20 w-64 overflow-auto"
-            aria-label="Карточка станции"
+            className="ags-glass-panel pointer-events-auto absolute bottom-3 right-3 top-14 z-20 w-72 overflow-auto"
+            aria-label="Наведение станции"
           >
-            <StationCard />
+            <div className="border-b border-white/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-ags-accent">
+              Наведение · вручную
+            </div>
+            <AimingControls />
           </aside>
         )}
       </div>

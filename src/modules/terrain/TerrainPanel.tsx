@@ -141,22 +141,51 @@ export function TerrainPanel({
     return () => window.clearInterval(id);
   }, []);
 
-  // GS-5: auto-couple A=station, B=look-at when azimuth / lookAt change.
+  // GS-5: auto-couple A=station, B=look-at when azimuth / lookAt / mast change.
   useEffect(() => {
     if (!coupled || !st || !lookAt) return;
     setStartLat(String(st.latitude));
     setStartLng(String(st.longitude));
     setEndLat(String(lookAt.lat));
     setEndLng(String(lookAt.lng));
-    void runProfile(
-      st.latitude,
-      st.longitude,
-      lookAt.lat,
-      lookAt.lng,
-      st.antennaCenterAmslM ?? null,
-    );
+    const mast = st.mastHeightM ?? 15;
+    let antennaAmsl = st.antennaCenterAmslM ?? null;
+    if (
+      antennaAmsl == null &&
+      st.terrainElevationM != null &&
+      !Number.isNaN(st.terrainElevationM)
+    ) {
+      antennaAmsl = st.terrainElevationM + mast + (st.antennaOffsetM ?? 0);
+    }
+    void (async () => {
+      if (antennaAmsl == null) {
+        const s = await getTerrainAdapter().sample(st.latitude, st.longitude);
+        if (s.elevationM != null) {
+          antennaAmsl = s.elevationM + mast + (st.antennaOffsetM ?? 0);
+        }
+      }
+      await runProfile(
+        st.latitude,
+        st.longitude,
+        lookAt.lat,
+        lookAt.lng,
+        antennaAmsl,
+      );
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coupled, st?.id, st?.latitude, st?.longitude, lookAt?.lat, lookAt?.lng, simAz]);
+  }, [
+    coupled,
+    st?.id,
+    st?.latitude,
+    st?.longitude,
+    st?.mastHeightM,
+    st?.antennaOffsetM,
+    st?.terrainElevationM,
+    st?.antennaCenterAmslM,
+    lookAt?.lat,
+    lookAt?.lng,
+    simAz,
+  ]);
 
   const exportCsv = () => {
     if (!profile.length) return;
