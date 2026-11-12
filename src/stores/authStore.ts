@@ -12,12 +12,18 @@ import {
 } from "@/services/database";
 import { isTauriRuntime } from "@/services/tauri";
 
+/** Local desktop GS: no interactive login gate. */
+const AUTO_USERNAME = "admin";
+const AUTO_PASSWORD = "admin";
+
 interface AuthState {
   session: AuthSession | null;
   ready: boolean;
   users: AuthUser[];
   idleTimeoutSecs: number;
   bootstrap: () => Promise<void>;
+  /** Re-establish local admin session (used after idle expire / logout). */
+  autoEnter: () => Promise<boolean>;
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
   /** Touch backend session; returns false if expired. */
@@ -32,18 +38,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   users: [],
   idleTimeoutSecs: 45 * 60,
 
+  autoEnter: async () => get().login(AUTO_USERNAME, AUTO_PASSWORD),
+
   bootstrap: async () => {
     await ensureDefaultAdmin();
     const users = await dbListUsers();
-    // P0-1: do not restore a write-capable backend session without password.
-    // Clear any stale UI session blob and require login.
+    // Clear stale backend session, then auto-enter as local admin.
     if (isTauriRuntime()) {
       await invoke("auth_clear_session").catch(() => undefined);
       await dbUpsertJson("auth_session", null);
-      set({ users, session: null, ready: true });
-      return;
     }
-    set({ users, session: null, ready: true });
+    set({ users, session: null });
+    const ok = await get().login(AUTO_USERNAME, AUTO_PASSWORD);
+    if (!ok && !isTauriRuntime()) {
+      const user: AuthUser = users[0] ?? {
+        id: "usr_admin",
+        username: AUTO_USERNAME,
+        role: "Administrator",
+        disabled: false,
+      };
+      set({
+        session: { user, loggedInAt: new Date().toISOString() },
+        users: users.length ? users : [user],
+      });
+    }
+    set({ ready: true });
   },
 
   login: async (username, password) => {
@@ -118,6 +137,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       eventBus.emit("info", "auth", `Выход: ${session.user.username}`);
     }
     set({ session: null });
+    // Desktop GS has no login gate — re-enter immediately.
+    void get().autoEnter();
   },
 
   touchSession: async () => {
@@ -133,14 +154,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ idleTimeoutSecs: info.idleTimeoutSecs });
       }
       if (!info.authenticated || info.expired) {
-        eventBus.emit("warning", "auth", "Сессия истекла — войдите снова");
-        get().logout();
-        return false;
+        eventBus.emit("warning", "auth", "Сессия обновлена (авто-вход)");
+        set({ session: null });
+        await get().autoEnter();
+        return Boolean(get().session);
       }
       return true;
     } catch {
-      get().logout();
-      return false;
+      set({ session: null });
+      await get().autoEnter();
+      return Boolean(get().session);
     }
   },
 

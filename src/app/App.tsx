@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { AppShell } from "@/components/layout";
-import { LoginScreen } from "@/components/auth/LoginScreen";
 import { ModuleErrorBoundary } from "@/components/common/ModuleErrorBoundary";
 import { useAppBootstrap } from "@/hooks/useAppBootstrap";
 import { useSqliteSync } from "@/hooks/useSqliteSync";
@@ -20,6 +19,7 @@ export default function App() {
   const ready = useAuthStore((s) => s.ready);
   const session = useAuthStore((s) => s.session);
   const bootstrapAuth = useAuthStore((s) => s.bootstrap);
+  const autoEnter = useAuthStore((s) => s.autoEnter);
 
   useEffect(() => {
     return eventBus.subscribe((event) => {
@@ -50,19 +50,18 @@ export default function App() {
     })();
   }, [bootstrapAuth]);
 
-  if (!ready) {
+  // Safety net: never stick on a login wall for local desktop GS.
+  useEffect(() => {
+    if (ready && !session) {
+      void autoEnter();
+    }
+  }, [ready, session, autoEnter]);
+
+  if (!ready || !session) {
     return (
       <div className="flex h-full items-center justify-center bg-ags-bg text-ags-muted">
         Загрузка…
       </div>
-    );
-  }
-
-  if (!session) {
-    return (
-      <ModuleErrorBoundary name="Вход">
-        <LoginScreen />
-      </ModuleErrorBoundary>
     );
   }
 
