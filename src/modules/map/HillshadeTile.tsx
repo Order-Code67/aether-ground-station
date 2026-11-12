@@ -38,8 +38,9 @@ export function HillshadeTile({
         width: size,
         height: size,
         mixBlendMode: "multiply",
-        opacity: 0.72,
+        opacity: 0.55,
       }}
+      onError={() => setSrc(null)}
     />
   );
 }

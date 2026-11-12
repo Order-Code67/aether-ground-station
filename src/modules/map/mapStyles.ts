@@ -16,6 +16,9 @@ export function absoluteAssetUrl(pathOrTemplate: string): string {
 /** Bundled offline satellite tiles (public/tiles) — Esri World Imagery. */
 export const BUNDLED_OFFLINE_TILES = "/tiles/{z}/{x}/{y}.jpg";
 
+/** Bundled place/boundary labels (public/tiles-labels). */
+export const BUNDLED_LABEL_TILES = "/tiles-labels/{z}/{x}/{y}.png";
+
 /** Bundled Terrarium DEM (public/dem-tiles) for relief / hillshade overlay. */
 export const BUNDLED_DEM_TILES = "/dem-tiles/{z}/{x}/{y}.png";
 export const BUNDLED_DEM_MIN_ZOOM = 5;

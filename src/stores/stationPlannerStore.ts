@@ -48,6 +48,11 @@ interface PlannerState {
   lookAt: LookAtPoint | null;
   /** When true, next map click sets look-at B. */
   pickLookAt: boolean;
+  /** Operator range ring (km) around active station. */
+  rangeKm: number;
+  showRangeRing: boolean;
+  /** Geometric radio-horizon lobe from DEM (not measured RF). */
+  showRadioHorizon: boolean;
   treeCollapsed: boolean;
   cardCollapsed: boolean;
   engineeringCollapsed: boolean;
@@ -71,6 +76,9 @@ interface PlannerState {
   ) => void;
   setLookAt: (p: LookAtPoint | null) => void;
   setPickLookAt: (v: boolean) => void;
+  setRangeKm: (km: number) => void;
+  setShowRangeRing: (v: boolean) => void;
+  setShowRadioHorizon: (v: boolean) => void;
   /** Rebuild look-at B from active station + sim azimuth (keeps distance). */
   syncLookAtFromAzimuth: () => void;
   setTreeCollapsed: (v: boolean) => void;
@@ -103,6 +111,9 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
   panTiltRanges: { ...DEFAULT_RANGES },
   lookAt: null,
   pickLookAt: false,
+  rangeKm: 40,
+  showRangeRing: true,
+  showRadioHorizon: true,
   treeCollapsed: false,
   cardCollapsed: true,
   engineeringCollapsed: false,
@@ -224,6 +235,13 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
   setLookAt: (p) => set({ lookAt: p, pickLookAt: false }),
 
   setPickLookAt: (v) => set({ pickLookAt: v }),
+
+  setRangeKm: (km) =>
+    set({ rangeKm: Math.min(300, Math.max(1, Number.isFinite(km) ? km : 40)) }),
+
+  setShowRangeRing: (v) => set({ showRangeRing: v }),
+
+  setShowRadioHorizon: (v) => set({ showRadioHorizon: v }),
 
   syncLookAtFromAzimuth: () => {
     const { activeStationId, stations, simAzimuthDeg, lookAt } = get();

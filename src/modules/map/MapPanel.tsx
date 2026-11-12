@@ -13,11 +13,14 @@ import {
   BUNDLED_DEM_MAX_ZOOM,
   BUNDLED_DEM_MIN_ZOOM,
   BUNDLED_DEM_TILES,
+  BUNDLED_LABEL_TILES,
   BUNDLED_OFFLINE_TILES,
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
 } from "./mapStyles";
 import { HillshadeTile } from "./HillshadeTile";
+import { placesVisibleAtZoom } from "./places";
+import { SafeTile } from "./SafeTile";
 import {
   destinationByAzimuth,
   lonLatToWorldPx,
@@ -25,6 +28,12 @@ import {
   tile2lon,
   worldPxToLonLat,
 } from "./slippyMath";
+import {
+  computeRadioHorizon,
+  type HorizonResult,
+} from "@/services/terrain/radioHorizon";
+import { getTerrainAdapter } from "@/services/terrain/terrainEngine";
+import { destinationPoint } from "@/utils/geo";
 
 interface UserMarker {
   id: string;
@@ -87,8 +96,18 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const setPickLookAt = useStationPlannerStore((s) => s.setPickLookAt);
   const setSimAzimuthDeg = useStationPlannerStore((s) => s.setSimAzimuthDeg);
   const plannerStations = useStationPlannerStore((s) => s.stations);
+  const rangeKm = useStationPlannerStore((s) => s.rangeKm);
+  const showRangeRing = useStationPlannerStore((s) => s.showRangeRing);
+  const showRadioHorizon = useStationPlannerStore((s) => s.showRadioHorizon);
+  const setRangeKm = useStationPlannerStore((s) => s.setRangeKm);
+  const setShowRangeRing = useStationPlannerStore((s) => s.setShowRangeRing);
+  const setShowRadioHorizon = useStationPlannerStore(
+    (s) => s.setShowRadioHorizon,
+  );
 
   const [measureMode, setMeasureMode] = useState(false);
+  const [labelsOn, setLabelsOn] = useState(true);
+  const [horizon, setHorizon] = useState<HorizonResult | null>(null);
   const [measureA, setMeasureA] = useState<{
     lng: number;
     lat: number;
@@ -171,6 +190,46 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   }, [activeComplexId]);
 
   const displayStations = plannerMode ? plannerStations : stations;
+  const active = displayStations.find((s) => s.id === activeStationId);
+
+  // Geometric radio-horizon lobe (DEM) — capped by operator range.
+  useEffect(() => {
+    if (!showRadioHorizon || !active) {
+      setHorizon(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const mast = active.mastHeightM ?? 15;
+      let antennaAmsl = active.antennaCenterAmslM ?? null;
+      if (antennaAmsl == null) {
+        const s = await getTerrainAdapter().sample(
+          active.latitude,
+          active.longitude,
+        );
+        if (s.elevationM != null) antennaAmsl = s.elevationM + mast;
+      }
+      const result = await computeRadioHorizon({
+        lat: active.latitude,
+        lng: active.longitude,
+        antennaAmslM: antennaAmsl,
+        heightAglM: mast,
+        rangeLimitM: rangeKm * 1000,
+      });
+      if (!cancelled) setHorizon(result);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    active?.id,
+    active?.latitude,
+    active?.longitude,
+    active?.mastHeightM,
+    active?.antennaCenterAmslM,
+    rangeKm,
+    showRadioHorizon,
+  ]);
 
   const project = useCallback(
     (lon: number, lat: number) => {
@@ -194,44 +253,52 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     [center.lat, center.lon, size.h, size.w, zoom],
   );
 
-  const tiles = useMemo(() => {
-    if (size.w <= 0 || size.h <= 0) return [];
-    const c = lonLatToWorldPx(center.lon, center.lat, zoom, TILE);
-    const left = c.x - size.w / 2;
-    const top = c.y - size.h / 2;
-    const x0 = Math.floor(left / TILE) - 1;
-    const y0 = Math.floor(top / TILE) - 1;
-    const x1 = Math.floor((left + size.w) / TILE) + 1;
-    const y1 = Math.floor((top + size.h) / TILE) + 1;
-    const n = 2 ** zoom;
-    const out: {
-      key: string;
-      x: number;
-      y: number;
-      left: number;
-      top: number;
-      url: string;
-    }[] = [];
-    for (let x = x0; x <= x1; x++) {
-      for (let y = y0; y <= y1; y++) {
-        if (y < 0 || y >= n) continue;
-        const tx = ((x % n) + n) % n;
-        const url = tileTpl
-          .replace("{z}", String(zoom))
-          .replace("{x}", String(tx))
-          .replace("{y}", String(y));
-        out.push({
-          key: `${zoom}/${tx}/${y}`,
-          x: tx,
-          y,
-          left: x * TILE - left,
-          top: y * TILE - top,
-          url,
-        });
+  const buildTileGrid = useCallback(
+    (tpl: string) => {
+      if (size.w <= 0 || size.h <= 0) return [];
+      const c = lonLatToWorldPx(center.lon, center.lat, zoom, TILE);
+      const left = c.x - size.w / 2;
+      const top = c.y - size.h / 2;
+      const x0 = Math.floor(left / TILE) - 1;
+      const y0 = Math.floor(top / TILE) - 1;
+      const x1 = Math.floor((left + size.w) / TILE) + 1;
+      const y1 = Math.floor((top + size.h) / TILE) + 1;
+      const n = 2 ** zoom;
+      const out: {
+        key: string;
+        left: number;
+        top: number;
+        url: string;
+      }[] = [];
+      for (let x = x0; x <= x1; x++) {
+        for (let y = y0; y <= y1; y++) {
+          if (y < 0 || y >= n) continue;
+          const tx = ((x % n) + n) % n;
+          out.push({
+            key: `${tpl}:${zoom}/${tx}/${y}`,
+            left: x * TILE - left,
+            top: y * TILE - top,
+            url: tpl
+              .replace("{z}", String(zoom))
+              .replace("{x}", String(tx))
+              .replace("{y}", String(y)),
+          });
+        }
       }
-    }
-    return out;
-  }, [center.lat, center.lon, size.h, size.w, tileTpl, zoom]);
+      return out;
+    },
+    [center.lat, center.lon, size.h, size.w, zoom],
+  );
+
+  const tiles = useMemo(() => buildTileGrid(tileTpl), [buildTileGrid, tileTpl]);
+  const labelTiles = useMemo(
+    () =>
+      labelsOn && tileMode === "offline"
+        ? buildTileGrid(absoluteAssetUrl(BUNDLED_LABEL_TILES))
+        : [],
+    [buildTileGrid, labelsOn, tileMode],
+  );
+  const placeLabels = useMemo(() => placesVisibleAtZoom(zoom), [zoom]);
 
   /** DEM tiles for hillshade (clamp to bundled Terrarium zooms). */
   const demTiles = useMemo(() => {
@@ -393,10 +460,40 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     setZoom((z) => Math.min(zMax, Math.max(MIN_Z, z + delta)));
   };
 
-  const toolBtn = (active: boolean) =>
-    active ? "ags-glass-btn ags-glass-btn--active" : "ags-glass-btn";
+  const toolBtn = (on: boolean) =>
+    on ? "ags-glass-btn ags-glass-btn--active" : "ags-glass-btn";
 
-  const active = displayStations.find((s) => s.id === activeStationId);
+  const rangeRingPath = useMemo(() => {
+    if (!showRangeRing || !active || size.w <= 0) return null;
+    const pts: string[] = [];
+    for (let i = 0; i <= 72; i++) {
+      const brg = (i / 72) * 360;
+      const p = destinationPoint(
+        active.latitude,
+        active.longitude,
+        brg,
+        rangeKm * 1000,
+      );
+      const s = project(p.lng, p.lat);
+      pts.push(`${i === 0 ? "M" : "L"}${s.x.toFixed(1)},${s.y.toFixed(1)}`);
+    }
+    return `${pts.join(" ")} Z`;
+  }, [
+    active,
+    project,
+    rangeKm,
+    showRangeRing,
+    size.w,
+  ]);
+
+  const horizonPath = useMemo(() => {
+    if (!horizon?.points.length || size.w <= 0) return null;
+    const pts = horizon.points.map((p, i) => {
+      const s = project(p.lng, p.lat);
+      return `${i === 0 ? "M" : "L"}${s.x.toFixed(1)},${s.y.toFixed(1)}`;
+    });
+    return `${pts.join(" ")} Z`;
+  }, [horizon, project, size.w]);
 
   return (
     <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#0b1018]">
@@ -412,18 +509,14 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         role="presentation"
       >
         {tiles.map((t) => (
-          <img
+          <SafeTile
             key={t.key}
-            src={t.url}
-            alt=""
-            draggable={false}
-            className="pointer-events-none absolute select-none"
-            style={{
-              left: t.left,
-              top: t.top,
-              width: TILE,
-              height: TILE,
-            }}
+            url={t.url}
+            left={t.left}
+            top={t.top}
+            width={TILE}
+            height={TILE}
+            zIndex={0}
           />
         ))}
 
@@ -437,8 +530,37 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           />
         ))}
 
-        {/* Azimuth / look-at lines */}
-        <svg className="pointer-events-none absolute inset-0 h-full w-full">
+        {labelTiles.map((t) => (
+          <SafeTile
+            key={t.key}
+            url={t.url}
+            left={t.left}
+            top={t.top}
+            width={TILE}
+            height={TILE}
+            zIndex={2}
+          />
+        ))}
+
+        {/* Range / radio-horizon / azimuth */}
+        <svg className="pointer-events-none absolute inset-0 z-[3] h-full w-full">
+          {rangeRingPath && (
+            <path
+              d={rangeRingPath}
+              fill="rgba(61,139,253,0.08)"
+              stroke="#3d8bfd"
+              strokeWidth={1.5}
+              strokeDasharray="8 6"
+            />
+          )}
+          {horizonPath && (
+            <path
+              d={horizonPath}
+              fill="rgba(90,212,160,0.18)"
+              stroke="#5ad4a0"
+              strokeWidth={2}
+            />
+          )}
           {displayStations.map((s) => {
             const useSim = plannerMode && s.id === activeStationId;
             const azDeg = useSim ? simAzimuthDeg : (s.azimuthDeg ?? null);
@@ -470,11 +592,28 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
               y1={project(active.longitude, active.latitude).y}
               x2={project(lookAt.lng, lookAt.lat).x}
               y2={project(lookAt.lng, lookAt.lat).y}
-              stroke="#5ad4a0"
+              stroke="#f0c14a"
               strokeWidth={2}
             />
           )}
         </svg>
+
+        {/* Smart place labels */}
+        {labelsOn &&
+          placeLabels.map((p) => {
+            const s = project(p.lng, p.lat);
+            if (s.x < -40 || s.y < -20 || s.x > size.w + 40 || s.y > size.h + 20)
+              return null;
+            return (
+              <div
+                key={`${p.name}-${p.lat}`}
+                className="pointer-events-none absolute z-[4] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white shadow"
+                style={{ left: s.x, top: s.y - 4 }}
+              >
+                {p.name}
+              </div>
+            );
+          })}
 
         {/* Station markers */}
         {displayStations.map((s) => {
@@ -614,6 +753,55 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         >
           Рельеф
         </button>
+        <button
+          type="button"
+          className={toolBtn(labelsOn)}
+          onClick={() => setLabelsOn((v) => !v)}
+        >
+          Подписи
+        </button>
+        <button
+          type="button"
+          className={toolBtn(showRangeRing)}
+          onClick={() => setShowRangeRing(!showRangeRing)}
+        >
+          Радиус
+        </button>
+        <label className="flex items-center gap-1 text-ags-muted">
+          км
+          <input
+            type="number"
+            className="ags-select w-14 !rounded-md !py-0.5 font-mono"
+            min={1}
+            max={300}
+            step={1}
+            value={rangeKm}
+            onChange={(e) => setRangeKm(Number(e.target.value))}
+            aria-label="Радиус действия км"
+          />
+        </label>
+        <button
+          type="button"
+          className={toolBtn(showRadioHorizon)}
+          disabled={!active}
+          title={
+            active
+              ? "Геометрический радиогоризонт по DEM (k=4/3)"
+              : "Выберите станцию"
+          }
+          onClick={() => {
+            setShowRadioHorizon(!showRadioHorizon);
+            eventBus.emit(
+              "info",
+              "map",
+              showRadioHorizon
+                ? "Радиогоризонт выкл"
+                : "Радиогоризонт: геометрия DEM · не измеренный RF",
+            );
+          }}
+        >
+          Радиогоризонт
+        </button>
         {distanceM != null && (
           <span className="px-1.5 font-mono text-ags-fg">
             {(distanceM / 1000).toFixed(3)} км
@@ -625,7 +813,30 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         </span>
       </div>
 
-      {/* Drag station: shift+drag active station */}
+      {(showRangeRing || showRadioHorizon) && (
+        <div className="ags-glass-bar pointer-events-none absolute bottom-3 left-3 z-10 max-w-md px-2 py-1.5 text-[10px] leading-snug text-ags-muted">
+          {showRangeRing && (
+            <div>
+              Синий пунктир — заданный радиус действия ({rangeKm} км).
+            </div>
+          )}
+          {showRadioHorizon && (
+            <div>
+              Зелёная зона — геометрический радиогоризонт (k=4/3, DEM)
+              {horizon
+                ? ` · горизонт ≤ ${(horizon.geometricMaxM / 1000).toFixed(1)} км`
+                : ""}
+              . Не измеренный RF и не прогноз канала.
+            </div>
+          )}
+          {!active && (
+            <div className="text-ags-warning">
+              Выберите станцию (точка А), чтобы считать радиус / горизонт.
+            </div>
+          )}
+        </div>
+      )}
+
       {canManage && active && (
         <button
           type="button"
