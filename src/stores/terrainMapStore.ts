@@ -74,7 +74,7 @@ const SETTINGS_KEY = "terrain_map_settings";
 export const useTerrainMapStore = create<TerrainMapState>((set, get) => ({
   tab: "map",
   view3d: false,
-  demoMode: true,
+  demoMode: false,
   demoDrone: null,
   liveDrone: null,
   freqGhz: 5.8,
@@ -94,8 +94,12 @@ export const useTerrainMapStore = create<TerrainMapState>((set, get) => ({
     get().persist();
   },
   setDemoMode: (demoMode) => {
-    set({ demoMode });
-    if (demoMode && !get().demoDrone) get().seedDemoDrone();
+    if (!demoMode) {
+      set({ demoMode: false, demoDrone: null });
+    } else {
+      set({ demoMode: true });
+      get().seedDemoDrone();
+    }
     get().persist();
   },
   setFreqGhz: (freqGhz) => {
@@ -153,7 +157,8 @@ export const useTerrainMapStore = create<TerrainMapState>((set, get) => ({
 
   effectiveDrone: () => {
     const { demoMode, demoDrone, liveDrone } = get();
-    if (!demoMode && liveDrone) {
+    // Live telemetry always wins when present and not in explicit DEMO.
+    if (liveDrone && !demoMode) {
       return {
         lat: liveDrone.lat,
         lng: liveDrone.lng,
@@ -171,7 +176,12 @@ export const useTerrainMapStore = create<TerrainMapState>((set, get) => ({
         source: "demo" as const,
       };
     }
-    const lookAt = useStationPlannerStore.getState().lookAt;
+    const planner = useStationPlannerStore.getState();
+    let lookAt = planner.lookAt;
+    if (!lookAt) {
+      planner.syncLookAtFromAzimuth();
+      lookAt = useStationPlannerStore.getState().lookAt;
+    }
     if (lookAt) {
       return {
         lat: lookAt.lat,
@@ -201,8 +211,10 @@ export const useTerrainMapStore = create<TerrainMapState>((set, get) => ({
       maxRangeKm?: number;
       view3d?: boolean;
     }>(SETTINGS_KEY, {});
+    // DEMO off by default — work with station / look-at / live telemetry.
     set({
-      demoMode: s.demoMode ?? true,
+      demoMode: false,
+      demoDrone: null,
       freqGhz: s.freqGhz ?? 5.8,
       showRadius: s.showRadius ?? true,
       showFresnel: s.showFresnel ?? true,
@@ -213,7 +225,7 @@ export const useTerrainMapStore = create<TerrainMapState>((set, get) => ({
       tab: s.view3d ? "3d" : "map",
       hydrated: true,
     });
-    if (s.demoMode !== false) get().seedDemoDrone();
+    get().persist();
   },
 
   persist: () => {

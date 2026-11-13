@@ -33,8 +33,10 @@ export function TerrainMapView() {
   const demoMode = useTerrainMapStore((s) => s.demoMode);
   const freqGhz = useTerrainMapStore((s) => s.freqGhz);
   const hydrate = useTerrainMapStore((s) => s.hydrate);
-  const seedDemoDrone = useTerrainMapStore((s) => s.seedDemoDrone);
   const effectiveDrone = useTerrainMapStore((s) => s.effectiveDrone);
+  const syncLookAtFromAzimuth = useStationPlannerStore(
+    (s) => s.syncLookAtFromAzimuth,
+  );
 
   const stations = useStationPlannerStore((s) => s.stations);
   const activeStationId = useStationPlannerStore((s) => s.activeStationId);
@@ -53,9 +55,10 @@ export function TerrainMapView() {
     void refresh();
   }, [hydrate, refresh]);
 
+  // Keep look-at target aligned with PAN for LOS / profile (no DEMO drone).
   useEffect(() => {
-    if (demoMode) seedDemoDrone();
-  }, [demoMode, simAz, rangeKm, activeStationId, seedDemoDrone]);
+    if (!demoMode) syncLookAtFromAzimuth();
+  }, [demoMode, simAz, rangeKm, activeStationId, syncLookAtFromAzimuth]);
 
   useEffect(() => {
     let cancelled = false;
@@ -159,11 +162,6 @@ export function TerrainMapView() {
         >
           3D
         </button>
-        {demoMode && (
-          <span className="rounded border border-amber-500/50 px-2 py-0.5 text-[10px] text-amber-200">
-            DEMO
-          </span>
-        )}
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -179,17 +177,22 @@ export function TerrainMapView() {
               <TerrainMesh3D className="h-full w-full" />
               {showHeightLegend && <HeightLegend />}
               <div className="ags-glass-bar pointer-events-none absolute bottom-3 left-3 z-10 px-2 py-1 text-[10px] text-ags-muted">
-                3D DEM mesh · орбита мышью в панели · DEMO/{drone.source}
+                3D DEM mesh · цель:{" "}
+                {drone.source === "live"
+                  ? "телеметрия"
+                  : drone.source === "lookAt"
+                    ? "направление / точка B"
+                    : drone.source}
               </div>
             </div>
           )}
           {tab === "telemetry" && (
             <div className="flex h-full items-center justify-center p-6 text-sm text-ags-muted">
-              Телеметрия дрона — модуль «Телеметрия» / COM JSON. Здесь:{" "}
+              Телеметрия дрона — модуль «Телеметрия» / COM JSON. Цель на карте:{" "}
               {drone.source === "live"
                 ? "LIVE позиция"
-                : drone.source === "demo"
-                  ? "DEMO позиция"
+                : drone.source === "lookAt"
+                  ? "точка направления (B)"
                   : "Нет данных позиции"}
             </div>
           )}
@@ -208,7 +211,6 @@ export function TerrainMapView() {
           stationAmsl={stationAmsl}
           droneAmsl={droneAmsl}
           status={profile?.status ?? "unknown"}
-          demo={demoMode}
         />
       </div>
 
@@ -237,8 +239,14 @@ export function TerrainMapView() {
         />
         <ElevationProfileChart
           profile={profile}
-          stationLabel={demoMode ? "НСУ" : "НСУ"}
-          droneLabel={drone.source === "demo" ? "DEMO дрон" : "Дрон"}
+          stationLabel="НСУ"
+          droneLabel={
+            drone.source === "live"
+              ? "Дрон"
+              : drone.source === "lookAt"
+                ? "Цель"
+                : "Цель"
+          }
         />
       </div>
     </div>

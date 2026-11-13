@@ -29,7 +29,6 @@ export function LinkSidebar({
   stationAmsl,
   droneAmsl,
   status,
-  demo,
 }: {
   distanceM: number | null;
   deltaHeightM: number | null;
@@ -38,7 +37,6 @@ export function LinkSidebar({
   stationAmsl: number | null;
   droneAmsl: number | null;
   status: RadioVisibilityStatus;
-  demo: boolean;
 }) {
   const az = useStationPlannerStore((s) => s.simAzimuthDeg);
   const el = useStationPlannerStore((s) => s.simElevationDeg);
@@ -62,9 +60,6 @@ export function LinkSidebar({
   const setFreqGhz = useTerrainMapStore((s) => s.setFreqGhz);
   const maxRangeKm = useTerrainMapStore((s) => s.maxRangeKm);
   const setMaxRangeKm = useTerrainMapStore((s) => s.setMaxRangeKm);
-  const demoMode = useTerrainMapStore((s) => s.demoMode);
-  const setDemoMode = useTerrainMapStore((s) => s.setDemoMode);
-
   const [antennas, setAntennas] = useState<AntennaProfile[]>([]);
   const [antennaId, setAntennaId] = useState("");
 
@@ -100,12 +95,6 @@ export function LinkSidebar({
 
   return (
     <aside className="flex h-full min-h-0 w-72 shrink-0 flex-col gap-2 overflow-auto border-l border-ags-border-subtle bg-ags-panel/95 p-3 text-xs backdrop-blur-md">
-      {demo && (
-        <div className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200">
-          DEMO MODE — расчёты и углы симуляции; команды ESP32 не отправляются
-        </div>
-      )}
-
       <section className="space-y-1.5 rounded border border-ags-border/60 p-2">
         <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ags-muted">
           Параметры связи
@@ -270,14 +259,6 @@ export function LinkSidebar({
         <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ags-muted">
           Настройки
         </h3>
-        <label className="flex items-center gap-2 text-[11px]">
-          <input
-            type="checkbox"
-            checked={demoMode}
-            onChange={(e) => setDemoMode(e.target.checked)}
-          />
-          DEMO MODE
-        </label>
         <label className="block text-[11px] text-ags-muted">
           Макс. радиус настроек
           <input

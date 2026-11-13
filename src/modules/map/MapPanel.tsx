@@ -118,7 +118,6 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   );
   const showRadiusPref = useTerrainMapStore((s) => s.showRadius);
   const droneEff = useTerrainMapStore((s) => s.effectiveDrone);
-  const demoMode = useTerrainMapStore((s) => s.demoMode);
 
   const [measureMode, setMeasureMode] = useState(false);
   const [labelsOn, setLabelsOn] = useState(true);
@@ -870,24 +869,22 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
                 className="absolute z-[5] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-ags-warning px-1.5 py-0.5 text-[9px] font-bold text-black shadow"
                 style={{ left: p.x, top: p.y }}
                 title={
-                  d.source === "demo"
-                    ? "DEMO дрон"
-                    : d.source === "live"
-                      ? "Дрон (телеметрия)"
-                      : "Цель B"
+                  d.source === "live"
+                    ? "Дрон (телеметрия)"
+                    : d.source === "lookAt"
+                      ? "Цель / направление"
+                      : d.source === "demo"
+                        ? "DEMO дрон"
+                        : "Цель"
                 }
               >
-                {d.source === "demo" ? "DEMO" : "Дрон"}
+                {d.source === "live"
+                  ? "Дрон"
+                  : d.source === "demo"
+                    ? "DEMO"
+                    : "Цель"}
                 {d.amslM != null ? ` · ${d.amslM.toFixed(0)}м` : ""}
               </div>
-              {demoMode && d.source === "demo" && (
-                <div
-                  className="pointer-events-none absolute z-[5] -translate-x-1/2 text-[9px] text-amber-200"
-                  style={{ left: p.x, top: p.y + 14 }}
-                >
-                  DEMO
-                </div>
-              )}
             </>
           );
         })()}
