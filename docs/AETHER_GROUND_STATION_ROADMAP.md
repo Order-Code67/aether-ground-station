@@ -20,11 +20,11 @@
 | **GS-3** | Station Planner | Medium–High | **DONE** + aiming (патчи/коридор/пресеты) |
 | **GS-4** | Mast & Antenna Manager | Medium | **Каркас**; beamwidth→патчи |
 | **GS-5** | Terrain Engine | Medium | **DONE** az-coupled + denser corridor; mesh gap |
-| **GS-6** | Device Manager hub UX | Medium | **Каркас DONE** — следующий UX-этап |
-| **GS-7** | Video Center | High (HW) | **Каркас**; HW lab separate |
-| **GS-8** | Telemetry Center | Medium | **Каркас** |
+| **GS-6** | Device Manager hub UX | Medium | **DONE** history + reconnect |
+| **GS-7** | Video Center | High (HW) | **DONE** layouts; HW lab separate |
+| **GS-8** | Telemetry Center | Medium | **DONE** charts/adapters/export |
 | **GS-9** | Event Center & Diagnostics | Low–Medium | **Каркас DONE** |
-| **GS-10** | Workspace & Integration | Medium | **Каркас**; полная §15 — backlog |
+| **GS-10** | Workspace & Integration | Medium | **DONE** role packs + selection sync |
 | **GS-PT** | Pan-Tilt visualization | High | Sim+3D+map; **COM read**; write после OK |
 
 Порядок: pan-tilt read → пресеты → Device hub → Video → Telemetry → GS-10.  

@@ -25,11 +25,11 @@
 | Mast/Antenna | Catalogs + mounts + beamwidth→патчи | Полный RF docs UI |
 | Terrain | A–B профиль, denser samples, 3D mesh (N/A без DEM) | Worker / denser mesh |
 | Pan-Tilt | Sim + 3D + map; COM listen parse AZ/EL | Local servo write (после OK) |
-| Devices hub | Tabs COM/USB/Net/HID | Connection history / reconnect UX |
-| Video | Panel + statuses | Multi-layout Video Center |
-| Telemetry | Normalize + history | Charts; adapters UI |
+| Devices hub | History + Reconnect + tabs | HID upsert polish |
+| Video | 1/2/4 layouts, Live honest, Walksnail tab | HW lab PASS |
+| Telemetry | Adapters UI, V/T charts, CSV+GPS | More adapters |
 | Events | Filter/export | Object deep-links |
-| Workspace | Templates | Full §15 |
+| Workspace | Role packs + selection sync | Full install smoke |
 
 ---
 

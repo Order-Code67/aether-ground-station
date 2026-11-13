@@ -8,13 +8,17 @@ import { HidView } from "@/modules/hid";
 type HubTab = "all" | "serial" | "usb" | "network" | "hid";
 
 /**
- * GS-6: единый Device Manager hub — вкладки вместо отдельных primary-пунктов.
+ * GS-6: единый Device Manager hub — история, reconnect, вкладки адаптеров.
  */
 export function DevicesView() {
   const [tab, setTab] = useState<HubTab>("all");
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col" data-testid="devices-hub">
+      <div className="border-b border-ags-border-subtle px-3 py-1.5 text-[10px] text-ags-dim">
+        Единый хаб · карточка + история · Reconnect где есть адаптер · без
+        имитации Online
+      </div>
       <div className="flex flex-wrap gap-1 border-b border-ags-border-subtle px-3 py-2">
         {(
           [

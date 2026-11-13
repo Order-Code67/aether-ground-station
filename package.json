@@ -1,7 +1,7 @@
 {
   "name": "aether-ground-station",
   "private": true,
-  "version": "1.0.9",
+  "version": "1.1.0",
   "description": "Aether Ground Station — modular desktop platform for ground hardware complexes",
   "type": "module",
   "scripts": {

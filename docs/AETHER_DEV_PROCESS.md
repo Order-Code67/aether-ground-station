@@ -18,16 +18,16 @@
 - [ ] Инженерия: профиль DEM по азимуту обновляется при смене мачты.
 - [ ] COM pan-tilt (если порт есть): только чтение AZ/EL; запись на серво отсутствует.
 
-## Порядок продукта (backlog)
+## Порядок продукта
 
-1. Адаптер pan-tilt **read** (COM `serial-data`) — в работе / каркас есть  
-2. Пресеты наведения (SQLite JSON) — каркас есть  
-3. Device hub (GS-6)  
-4. Video Center (GS-7)  
-5. Telemetry (GS-8)  
-6. Workspace polish (GS-10)  
+1. ~~Адаптер pan-tilt **read**~~ DONE  
+2. ~~Пресеты наведения~~ DONE  
+3. ~~Device hub (GS-6)~~ DONE  
+4. ~~Video Center (GS-7)~~ DONE  
+5. ~~Telemetry (GS-8)~~ DONE  
+6. ~~Workspace polish (GS-10)~~ DONE  
 
-**Локальный write серво** — отдельный этап, только после явного OK по безопасности.
+**Осталось:** GS-9 polish; HW lab; **локальный write серво** — только после явного OK.
 
 ## CI
 

@@ -4,6 +4,7 @@ import { ModuleErrorBoundary } from "@/components/common/ModuleErrorBoundary";
 import { useAppBootstrap } from "@/hooks/useAppBootstrap";
 import { useSqliteSync } from "@/hooks/useSqliteSync";
 import { useAuthIdleGuard } from "@/hooks/useAuthIdleGuard";
+import { useSelectionSync } from "@/hooks/useSelectionSync";
 import { eventBus } from "@/services/events/eventBus";
 import { dbAppendEvent, dbInit, dbGetJson } from "@/services/database";
 import { deviceManager } from "@/services/devices/deviceManager";
@@ -15,6 +16,7 @@ export default function App() {
   useAppBootstrap();
   useSqliteSync();
   useAuthIdleGuard();
+  useSelectionSync();
   const append = useEventLogStore((s) => s.append);
   const ready = useAuthStore((s) => s.ready);
   const session = useAuthStore((s) => s.session);

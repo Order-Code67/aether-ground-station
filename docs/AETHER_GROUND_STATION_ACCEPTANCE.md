@@ -76,20 +76,20 @@
 - [ ] Missing = N/A; RF disclaimer visible  
 
 ### GS-6
-- [ ] Один UI «Оборудование»  
-- [ ] Карточка: status, last seen, errors  
-- [ ] Reconnect where adapter exists  
+- [x] Один UI «Оборудование»  
+- [x] Карточка: status, last seen, errors + history  
+- [x] Reconnect where adapter exists  
 
 ### GS-7
-- [ ] Multi-source + layouts  
-- [ ] Record + archive  
-- [ ] Statuses Connecting/Live/No Signal/No Device/Error  
-- [ ] WebRTC hidden  
+- [x] Multi-source + layouts (1/2/4)  
+- [x] Record + archive (UVC)  
+- [x] Statuses Connecting/Live/No Signal/No Device/Error  
+- [x] WebRTC hidden  
 
 ### GS-8
-- [ ] Adapter sources; N/A fields  
-- [ ] History + export  
-- [ ] No uplink commands  
+- [x] Adapter sources; N/A fields (GPS)  
+- [x] History + export (CSV widened)  
+- [x] No uplink commands  
 
 ### GS-9
 - [ ] Filter/search/export events  
@@ -97,10 +97,10 @@
 - [ ] Critical categories covered  
 
 ### GS-10
-- [ ] Role workspaces  
-- [ ] Cross-module selection sync  
+- [x] Role workspaces (packs)  
+- [x] Cross-module selection sync  
 - [ ] Full suite + install smoke  
-- [ ] Release notes draft; **publish only on OK**
+- [x] Release notes draft; **publish only on OK**
 
 ---
 
