@@ -4,8 +4,8 @@ import { videoSignalLabel, type VideoSignalState } from "./video";
 describe("P1-6 video signal labels", () => {
   it("maps connecting/streaming for operator UI", () => {
     expect(videoSignalLabel("connecting")).toBe("Connecting");
-    expect(videoSignalLabel("streaming")).toBe("Streaming");
-    expect(videoSignalLabel("ok")).toBe("Streaming");
+    expect(videoSignalLabel("streaming")).toBe("Live");
+    expect(videoSignalLabel("ok")).toBe("Live");
     expect(videoSignalLabel("no-signal")).toBe("No signal");
   });
 

@@ -81,14 +81,14 @@ export function createTemplateLayout(
     default:
       return {
         ...base,
-        name: name ?? "Стандартный",
+        name: name ?? "Оператор",
         template: "standard",
         columns: [["p_video", "p_map"], ["p_devices", "p_telemetry"]],
         panels: {
           p_video: panel("p_video", "video", "Видео", 2),
           p_map: panel("p_map", "map", "Карта", 2),
           p_devices: panel("p_devices", "devices", "Устройства", 1),
-          p_telemetry: panel("p_telemetry", "telemetry", "Диагностика", 1),
+          p_telemetry: panel("p_telemetry", "telemetry", "Телеметрия", 1),
         },
       };
   }
@@ -97,15 +97,15 @@ export function createTemplateLayout(
 export function templateLabel(id: WorkspaceTemplateId): string {
   switch (id) {
     case "standard":
-      return "Стандартный";
+      return "Оператор";
     case "video":
-      return "Видеонаблюдение";
+      return "Видеоцентр";
     case "map":
-      return "Карта";
+      return "Карта и планирование";
     case "engineering":
-      return "Инженерный";
+      return "Инженер";
     case "custom":
-      return "Пользовательский";
+      return "Администратор / custom";
   }
 }
 

@@ -7,16 +7,22 @@ import {
   dbBackup,
   dbListUsers,
   dbRestore,
+  dbUpsertSetting,
   dbUpsertUser,
 } from "@/services/database";
 import type { AuthUser } from "@/types/auth";
 import { eventBus } from "@/services/events/eventBus";
+import { useNavigationStore } from "@/stores/navigationStore";
+import { MODULES, type ModuleId } from "@/types";
 
 export function SettingsView() {
   const appInfo = useAppStore((s) => s.appInfo);
   const storageFolder = useArchiveStore((s) => s.storageFolder);
   const setStorageFolder = useArchiveStore((s) => s.setStorageFolder);
   const role = useAuthStore((s) => s.session?.user.role);
+  const showAdvanced = useNavigationStore((s) => s.showAdvanced);
+  const setShowAdvanced = useNavigationStore((s) => s.setShowAdvanced);
+  const navigateToModule = useNavigationStore((s) => s.navigateToModule);
   const [backupPath, setBackupPath] = useState<string | null>(null);
   const [restorePath, setRestorePath] = useState("");
   const [restoreNote, setRestoreNote] = useState<string | null>(null);
@@ -124,8 +130,15 @@ export function SettingsView() {
           className="rounded bg-ags-accent px-3 py-1.5 text-white disabled:opacity-40"
           disabled={!isTauriRuntime()}
           onClick={() => {
-            void dbBackup().then((path) => {
+            void dbBackup().then(async (path) => {
               setBackupPath(path);
+              if (path) {
+                await dbUpsertSetting("last_backup_path", path);
+                await dbUpsertSetting(
+                  "last_backup_at",
+                  new Date().toISOString(),
+                );
+              }
               eventBus.emit(
                 "info",
                 "database",
@@ -255,6 +268,51 @@ export function SettingsView() {
           <li>Observer — read-only; manage users только Administrator</li>
         </ul>
       </section>
+
+      {(role === "Administrator" || role === "Operator") && (
+        <section className="max-w-lg space-y-3 rounded-lg border border-dashed border-ags-border bg-ags-panel p-4 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-ags-muted">
+              Advanced
+            </h2>
+            <button
+              type="button"
+              className="rounded border border-ags-border px-2 py-1 text-xs"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+            >
+              {showAdvanced ? "Скрыть" : "Показать"}
+            </button>
+          </div>
+          <p className="text-xs text-ags-dim">
+            Инженерные модули скрыты из основной навигации (GS-1).
+          </p>
+          {showAdvanced && (
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  "remote",
+                  "plugins",
+                  "robotics",
+                  "aerial",
+                  "workspace",
+                ] as ModuleId[]
+              ).map((id) => {
+                const label = MODULES.find((m) => m.id === id)?.label ?? id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    className="rounded border border-ags-border px-2 py-1 text-xs hover:bg-ags-elevated"
+                    onClick={() => navigateToModule(id)}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

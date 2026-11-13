@@ -2,7 +2,17 @@ import { Suspense, lazy, type ComponentType } from "react";
 import { MODULES, type ModuleId } from "@/types";
 import { useNavigationStore } from "@/stores/navigationStore";
 import { ModuleErrorBoundary } from "@/components/common/ModuleErrorBoundary";
+import { SectionSubNav } from "./SectionSubNav";
 
+const HomeView = lazy(() =>
+  import("@/modules/home").then((m) => ({ default: m.HomeView })),
+);
+const ComplexesView = lazy(() =>
+  import("@/modules/complexes").then((m) => ({ default: m.ComplexesView })),
+);
+const CatalogsView = lazy(() =>
+  import("@/modules/catalogs").then((m) => ({ default: m.CatalogsView })),
+);
 const WorkspaceView = lazy(() =>
   import("@/modules/workspace").then((m) => ({ default: m.WorkspaceView })),
 );
@@ -42,6 +52,9 @@ const TelemetryView = lazy(() =>
 const ArchiveView = lazy(() =>
   import("@/modules/archive").then((m) => ({ default: m.ArchiveView })),
 );
+const EventsView = lazy(() =>
+  import("@/modules/events").then((m) => ({ default: m.EventsView })),
+);
 const InventoryView = lazy(() =>
   import("@/modules/inventory").then((m) => ({ default: m.InventoryView })),
 );
@@ -71,6 +84,9 @@ const SettingsView = lazy(() =>
 );
 
 const VIEWS: Record<ModuleId, ComponentType> = {
+  home: HomeView,
+  complexes: ComplexesView,
+  catalogs: CatalogsView,
   workspace: WorkspaceView,
   video: VideoView,
   walksnail: WalksnailView,
@@ -84,6 +100,7 @@ const VIEWS: Record<ModuleId, ComponentType> = {
   serial: SerialView,
   telemetry: TelemetryView,
   archive: ArchiveView,
+  events: EventsView,
   inventory: InventoryView,
   reports: ReportsView,
   plugins: PluginsView,
@@ -108,17 +125,34 @@ export function WorkArea() {
     );
   }
 
+  const mapLike =
+    activeModule === "map" ||
+    activeModule === "stations" ||
+    activeModule === "terrain" ||
+    activeModule === "pantilt";
+
   return (
-    <main className="min-w-0 flex-1 overflow-auto bg-ags-bg">
-      <ModuleErrorBoundary name={def.label}>
-        <Suspense
-          fallback={
-            <div className="p-6 text-sm text-ags-muted">Загрузка модуля…</div>
-          }
-        >
-          <View />
-        </Suspense>
-      </ModuleErrorBoundary>
-    </main>
+    <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-ags-bg">
+      <SectionSubNav />
+      <main
+        className={
+          mapLike
+            ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+            : "min-h-0 min-w-0 flex-1 overflow-auto"
+        }
+      >
+        <ModuleErrorBoundary name={def.label}>
+          <Suspense
+            fallback={
+              <div className="p-6 text-sm text-ags-muted">Загрузка модуля…</div>
+            }
+          >
+            <div className={mapLike ? "min-h-0 flex-1" : "contents"}>
+              <View />
+            </div>
+          </Suspense>
+        </ModuleErrorBoundary>
+      </main>
+    </div>
   );
 }

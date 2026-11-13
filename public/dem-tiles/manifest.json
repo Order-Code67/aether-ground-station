@@ -1,0 +1,23 @@
+{
+  "encoding": "terrarium",
+  "tileSize": 256,
+  "minzoom": 5,
+  "maxzoom": 11,
+  "attribution": "Mapzen Terrarium / AWS elevation-tiles-prod (open elevation)",
+  "coverage": {
+    "centralRussia": {
+      "west": 30.5,
+      "south": 51,
+      "east": 42,
+      "north": 58.5
+    },
+    "smolenskOblast": {
+      "west": 30.7,
+      "south": 53.7,
+      "east": 35.5,
+      "north": 56.05
+    }
+  },
+  "tileCount": 2432,
+  "fetchedAt": "2026-11-11T20:52:34.362Z"
+}

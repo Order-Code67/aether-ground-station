@@ -21,11 +21,37 @@ export interface TerrainProfilePoint {
 export interface DemSourceMeta {
   id: string;
   name: string;
-  sourceType: "geotiff" | "srtm" | "copernicus" | "aster" | "custom" | "none";
+  sourceType:
+    | "geotiff"
+    | "srtm"
+    | "copernicus"
+    | "aster"
+    | "terrarium"
+    | "custom"
+    | "none";
   path?: string;
   resolutionM?: number;
   verticalDatum?: string;
   uncertaintyM?: number;
+}
+
+/** Bundled Mapzen Terrarium DEM under public/dem-tiles (offline). */
+export const BUNDLED_DEM_TILES = "/dem-tiles/{z}/{x}/{y}.png";
+export const BUNDLED_DEM_MIN_ZOOM = 5;
+export const BUNDLED_DEM_MAX_ZOOM = 11;
+
+/** Terrarium RGB → meters AMSL (Mapzen encoding). */
+export function decodeTerrariumRgb(r: number, g: number, b: number): number {
+  return r * 256 + g + b / 256 - 32768;
+}
+
+function lonLatToTileFrac(lon: number, lat: number, z: number) {
+  const n = 2 ** z;
+  const x = ((lon + 180) / 360) * n;
+  const rad = (lat * Math.PI) / 180;
+  const y =
+    ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * n;
+  return { x, y };
 }
 
 export interface TerrainAdapter {
@@ -164,4 +190,147 @@ export function createGeoTiffAdapter(path: string): TerrainAdapter {
       };
     },
   };
+}
+
+type TilePixels = { w: number; h: number; data: Uint8ClampedArray };
+
+/**
+ * Offline Terrarium PNG tiles (Mapzen encoding) — used for MapLibre 3D
+ * and elevation sampling without Rust GeoTIFF.
+ */
+export function createTerrariumTileAdapter(opts?: {
+  template?: string;
+  zoom?: number;
+  label?: string;
+}): TerrainAdapter {
+  const template = opts?.template ?? BUNDLED_DEM_TILES;
+  const zoom = Math.min(
+    BUNDLED_DEM_MAX_ZOOM,
+    Math.max(BUNDLED_DEM_MIN_ZOOM, opts?.zoom ?? 10),
+  );
+  const cache = new Map<string, Promise<TilePixels | null>>();
+
+  async function loadTile(z: number, x: number, y: number): Promise<TilePixels | null> {
+    const key = `${z}/${x}/${y}`;
+    let pending = cache.get(key);
+    if (!pending) {
+      pending = (async () => {
+        const url = template
+          .replace("{z}", String(z))
+          .replace("{x}", String(x))
+          .replace("{y}", String(y));
+        try {
+          const res = await fetch(url);
+          if (!res.ok) return null;
+          const blob = await res.blob();
+          const bmp = await createImageBitmap(blob);
+          const canvas = document.createElement("canvas");
+          canvas.width = bmp.width;
+          canvas.height = bmp.height;
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          if (!ctx) return null;
+          ctx.drawImage(bmp, 0, 0);
+          const img = ctx.getImageData(0, 0, bmp.width, bmp.height);
+          bmp.close();
+          return { w: img.width, h: img.height, data: img.data };
+        } catch {
+          return null;
+        }
+      })();
+      cache.set(key, pending);
+    }
+    return pending;
+  }
+
+  return {
+    id: "terrarium",
+    label: opts?.label ?? "Terrarium DEM (офлайн)",
+    async sample(lat, lng) {
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return {
+          latitude: lat,
+          longitude: lng,
+          elevationM: null,
+          sourceId: null,
+          missing: true,
+        };
+      }
+      const { x, y } = lonLatToTileFrac(lng, lat, zoom);
+      const tx = Math.floor(x);
+      const ty = Math.floor(y);
+      const tile = await loadTile(zoom, tx, ty);
+      if (!tile) {
+        return {
+          latitude: lat,
+          longitude: lng,
+          elevationM: null,
+          sourceId: "terrarium",
+          missing: true,
+        };
+      }
+      const px = Math.min(tile.w - 1, Math.max(0, Math.floor((x - tx) * tile.w)));
+      const py = Math.min(tile.h - 1, Math.max(0, Math.floor((y - ty) * tile.h)));
+      const i = (py * tile.w + px) * 4;
+      const elevationM = decodeTerrariumRgb(
+        tile.data[i]!,
+        tile.data[i + 1]!,
+        tile.data[i + 2]!,
+      );
+      // Void / ocean sentinel in some tiles
+      if (!Number.isFinite(elevationM) || elevationM < -500) {
+        return {
+          latitude: lat,
+          longitude: lng,
+          elevationM: null,
+          sourceId: "terrarium",
+          missing: true,
+        };
+      }
+      return {
+        latitude: lat,
+        longitude: lng,
+        elevationM: Math.round(elevationM * 10) / 10,
+        sourceId: "terrarium",
+        missing: false,
+      };
+    },
+  };
+}
+
+/** Probe bundled DEM and register Terrarium adapter when tiles exist. */
+export async function registerBundledTerrariumDem(): Promise<boolean> {
+  try {
+    const probe = await fetch(
+      BUNDLED_DEM_TILES.replace("{z}", "8")
+        .replace("{x}", "154")
+        .replace("{y}", "79"),
+      { method: "HEAD" },
+    );
+    // Some hosts ignore HEAD — fall back to GET of manifest
+    if (!probe.ok) {
+      const man = await fetch("/dem-tiles/manifest.json");
+      if (!man.ok) return false;
+    }
+  } catch {
+    try {
+      const man = await fetch("/dem-tiles/manifest.json");
+      if (!man.ok) return false;
+    } catch {
+      return false;
+    }
+  }
+  if (active.id !== "none" && active.id !== "terrarium") {
+    // Keep operator-loaded GeoTIFF / manual
+    return false;
+  }
+  setTerrainAdapter(createTerrariumTileAdapter({ zoom: 10 }), {
+    id: "bundled-terrarium",
+    name: "Terrarium · Смоленск / Центральная Россия (офлайн)",
+    sourceType: "terrarium",
+    path: BUNDLED_DEM_TILES,
+    resolutionM: 30,
+    verticalDatum: "EGM96-approx (Terrarium)",
+    uncertaintyM: 10,
+  });
+  return true;
 }

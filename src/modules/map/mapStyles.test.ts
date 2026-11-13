@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { offlineStyle, OSM_STYLE } from "./mapStyles";
+import { BUNDLED_OFFLINE_TILES, offlineStyle, OSM_STYLE } from "./mapStyles";
 
 describe("map offline / XYZ styles", () => {
-  it("offline has no external tile sources", () => {
+  it("default offline uses bundled local tiles (no CDN)", () => {
     const s = offlineStyle();
-    expect(Object.keys(s.sources ?? {})).toHaveLength(0);
+    const src = s.sources?.local as { tiles?: string[] } | undefined;
+    expect(src?.tiles?.[0]).toContain(BUNDLED_OFFLINE_TILES);
+    expect(src?.tiles?.[0]).not.toMatch(/^https?:\/\/(?!localhost)/);
     expect(s.layers?.some((l) => l.type === "background")).toBe(true);
   });
 

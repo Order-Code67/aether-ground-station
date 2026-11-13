@@ -1,4 +1,4 @@
 [[permission]]
 identifier = "allow-app-info"
-description = "Разрешить чтение сведений о приложении"
-commands.allow = ["get_app_info"]
+description = "Разрешить чтение сведений о приложении и свободного места на диске"
+commands.allow = ["get_app_info", "system_disk_space"]

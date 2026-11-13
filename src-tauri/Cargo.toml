@@ -1,6 +1,6 @@
 [package]
 name = "aether-ground-station"
-version = "1.0.0"
+version = "1.1.2"
 description = "Aether Ground Station — modular ground station platform"
 authors = ["Aether"]
 edition = "2021"

@@ -87,7 +87,12 @@ pub fn verify_credentials(
 
 pub fn open_and_migrate(state: &DbState) -> Result<String, String> {
     let path = db_path()?;
-    let conn = Connection::open(&path).map_err(|e| e.to_string())?;
+    let conn = Connection::open(&path).map_err(|e| {
+        format!(
+            "Не удалось открыть SQLite ({path}): {e}. Проверьте права доступа, блокировку файла или целостность БД.",
+            path = path.display()
+        )
+    })?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")
         .map_err(|e| e.to_string())?;
     super::migrations::apply_migrations(&conn)?;
@@ -136,6 +141,9 @@ pub struct DbEvent {
     pub message: String,
 }
 
+/// Keep event_log bounded (1.0.1 P1 retention).
+const EVENT_LOG_MAX_ROWS: i64 = 2000;
+
 #[tauri::command]
 pub fn db_append_event(
     state: State<'_, DbState>,
@@ -151,6 +159,19 @@ pub fn db_append_event(
             params![id, at, severity, source, message],
         )
         .map_err(|e| e.to_string())?;
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM event_log", [], |r| r.get(0))
+            .unwrap_or(0);
+        if count > EVENT_LOG_MAX_ROWS {
+            let drop_n = count - EVENT_LOG_MAX_ROWS;
+            conn.execute(
+                "DELETE FROM event_log WHERE id IN (
+                   SELECT id FROM event_log ORDER BY at ASC LIMIT ?1
+                 )",
+                params![drop_n],
+            )
+            .map_err(|e| e.to_string())?;
+        }
         Ok(())
     })
 }

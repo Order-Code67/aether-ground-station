@@ -1,7 +1,7 @@
 {
   "name": "aether-ground-station",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.2",
   "description": "Aether Ground Station — modular desktop platform for ground hardware complexes",
   "type": "module",
   "scripts": {
@@ -17,6 +17,10 @@
     "smoke:install": "powershell -ExecutionPolicy Bypass -File scripts/smoke-post-install.ps1",
     "ffmpeg:fetch": "powershell -ExecutionPolicy Bypass -File scripts/fetch-ffmpeg.ps1",
     "ffmpeg:check": "node scripts/check-ffmpeg-bundle.mjs",
+    "tiles:fetch": "node scripts/fetch-offline-tiles.mjs",
+    "dem:fetch": "node scripts/fetch-dem-tiles.mjs",
+    "dem:fetch:copernicus": "node scripts/fetch-copernicus-dem.mjs",
+    "labels:fetch": "node scripts/fetch-label-tiles.mjs",
     "pretauri:build": "node scripts/check-ffmpeg-bundle.mjs",
     "gateway:stub": "npm --prefix services/gateway-server start",
     "gateway:certs": "node scripts/gen-gateway-certs.mjs",
@@ -36,6 +40,7 @@
     "maplibre-gl": "^6.16.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "three": "^0.170.0",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
@@ -44,6 +49,7 @@
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "@types/three": "^0.170.0",
     "@vitejs/plugin-react": "^6.0.2",
     "selfsigned": "^5.5.0",
     "tailwindcss": "^4.3.3",

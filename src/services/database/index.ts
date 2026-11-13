@@ -26,6 +26,19 @@ export async function dbAppendEvent(event: {
   await call("db_append_event", event);
 }
 
+export async function dbListEvents(limit = 200): Promise<
+  Array<{
+    id: string;
+    at: string;
+    severity: string;
+    source: string;
+    message: string;
+  }>
+> {
+  if (!isTauriRuntime()) return [];
+  return call("db_list_events", { limit });
+}
+
 export async function dbBackup(): Promise<string | null> {
   if (!isTauriRuntime()) return null;
   return call<string>("db_backup");
@@ -42,6 +55,13 @@ export async function dbUpsertSetting(key: string, value: string): Promise<void>
     return;
   }
   await call("db_upsert_setting", { key, value });
+}
+
+export async function dbGetSetting(key: string): Promise<string | null> {
+  if (!isTauriRuntime()) {
+    return memoryKv.get(`setting:${key}`) ?? null;
+  }
+  return call<string | null>("db_get_setting", { key });
 }
 
 export async function dbUpsertJson(key: string, value: unknown): Promise<void> {

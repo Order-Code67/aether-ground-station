@@ -23,7 +23,8 @@ export function videoSignalLabel(state: VideoSignalState): string {
       return "Connecting";
     case "streaming":
     case "ok":
-      return "Streaming";
+      // Operator-facing Live only when frames are flowing (streaming/ok).
+      return "Live";
     case "recording":
       return "Recording";
     case "no-device":

@@ -1,8 +1,14 @@
-import type { DeviceCard, DeviceStatus } from "@/types";
+import type {
+  DeviceCard,
+  DeviceConnectionEvent,
+  DeviceStatus,
+} from "@/types";
 import { eventBus } from "@/services/events/eventBus";
 import { dbGetJson, dbUpsertJson } from "@/services/database";
 
 type Listener = (devices: DeviceCard[]) => void;
+
+const HISTORY_CAP = 40;
 
 /**
  * Unified Device Manager — single registry for COM/USB/Network/Capture cards.
@@ -34,13 +40,51 @@ class DeviceManager {
     return this.devices.get(id);
   }
 
+  hasReconnectHandler(id: string): boolean {
+    return this.reconnectHandlers.has(id);
+  }
+
+  private pushHistory(
+    card: DeviceCard,
+    kind: DeviceConnectionEvent["kind"],
+    message: string,
+  ): DeviceConnectionEvent[] {
+    const ev: DeviceConnectionEvent = {
+      at: new Date().toISOString(),
+      kind,
+      message,
+    };
+    return [ev, ...(card.history ?? [])].slice(0, HISTORY_CAP);
+  }
+
   upsert(device: DeviceCard): void {
     const prev = this.devices.get(device.id);
-    this.devices.set(device.id, {
+    const merged: DeviceCard = {
       ...prev,
       ...device,
       lastSeenAt: device.lastSeenAt ?? new Date().toISOString(),
-    });
+      history: device.history ?? prev?.history,
+      lastError:
+        device.lastError !== undefined ? device.lastError : prev?.lastError,
+    };
+    if (!prev || prev.status !== merged.status) {
+      const kind: DeviceConnectionEvent["kind"] =
+        merged.status === "Online"
+          ? "online"
+          : merged.status === "Reconnecting"
+            ? "reconnect"
+            : merged.status === "Error"
+              ? "error"
+              : merged.status === "Lost"
+                ? "lost"
+                : "info";
+      merged.history = this.pushHistory(
+        merged,
+        kind,
+        `Статус → ${merged.status}`,
+      );
+    }
+    this.devices.set(device.id, merged);
     this.emit();
   }
 
@@ -52,7 +96,25 @@ class DeviceManager {
       status,
       lastSeenAt: new Date().toISOString(),
       capabilities: cur.capabilities,
+      lastError: error ?? (status === "Online" ? null : cur.lastError),
     };
+    const kind: DeviceConnectionEvent["kind"] =
+      status === "Online"
+        ? "online"
+        : status === "Reconnecting"
+          ? "reconnect"
+          : status === "Error"
+            ? "error"
+            : status === "Lost"
+              ? "lost"
+              : status === "Offline"
+                ? "offline"
+                : "info";
+    next.history = this.pushHistory(
+      next,
+      kind,
+      error ? `${status}: ${error}` : `Статус → ${status}`,
+    );
     if (error) {
       eventBus.emit("warning", "device-manager", `${cur.name}: ${error}`);
     }
@@ -61,9 +123,6 @@ class DeviceManager {
     }
     if (status === "Online") {
       this.clearReconnect(id);
-    }
-    if (status === "Reconnecting") {
-      // keep timer; handler already running
     }
     this.devices.set(id, next);
     this.emit();
@@ -78,6 +137,30 @@ class DeviceManager {
 
   registerReconnectHandler(id: string, handler: () => Promise<void>): void {
     this.reconnectHandlers.set(id, handler);
+  }
+
+  /** Manual reconnect from hub UI. */
+  async reconnectNow(id: string): Promise<boolean> {
+    const handler = this.reconnectHandlers.get(id);
+    if (!handler) {
+      eventBus.emit(
+        "warning",
+        "device-manager",
+        `Нет обработчика reconnect для ${id}`,
+      );
+      return false;
+    }
+    this.clearReconnect(id);
+    this.setStatus(id, "Reconnecting");
+    try {
+      await handler();
+      this.setStatus(id, "Online");
+      return true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.setStatus(id, "Lost", msg);
+      return false;
+    }
   }
 
   private clearReconnect(id: string): void {
@@ -116,11 +199,19 @@ class DeviceManager {
     const now = new Date().toISOString();
     for (const d of snapshot) {
       const wasLive = d.status === "Online" || d.status === "Reconnecting";
-      this.devices.set(d.id, {
+      const card: DeviceCard = {
         ...d,
         status: wasLive ? "Offline" : d.status,
         lastSeenAt: now,
-      });
+      };
+      if (wasLive) {
+        card.history = this.pushHistory(
+          card,
+          "offline",
+          "После перезапуска — Offline (откройте COM/Video для reconnect)",
+        );
+      }
+      this.devices.set(d.id, card);
     }
     this.emit();
     if (snapshot.some((d) => d.status === "Online" || d.status === "Reconnecting")) {
@@ -152,6 +243,10 @@ class DeviceManager {
       {},
     );
     return cur[kind] ?? null;
+  }
+
+  async listIntents(): Promise<Record<string, Record<string, unknown>>> {
+    return dbGetJson("device_intents", {});
   }
 }
 

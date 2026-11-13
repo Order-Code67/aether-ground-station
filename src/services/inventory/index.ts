@@ -10,6 +10,11 @@ export interface EquipmentItem {
   inventoryNumber?: string | null;
   status?: string | null;
   location?: string | null;
+  stationId?: string | null;
+  complexId?: string | null;
+  siteId?: string | null;
+  category?: string | null;
+  installedAt?: string | null;
   payload: string;
   updatedAt: string;
 }

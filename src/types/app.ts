@@ -1,5 +1,8 @@
-/** Идентификаторы модулей платформы (V2). */
+/** Идентификаторы модулей платформы (V2 + GS-1 home). */
 export type ModuleId =
+  | "home"
+  | "complexes"
+  | "catalogs"
   | "workspace"
   | "video"
   | "walksnail"
@@ -13,6 +16,7 @@ export type ModuleId =
   | "serial"
   | "telemetry"
   | "archive"
+  | "events"
   | "inventory"
   | "reports"
   | "plugins"
@@ -32,6 +36,24 @@ export interface ModuleDefinition {
 
 export const MODULES: readonly ModuleDefinition[] = [
   {
+    id: "home",
+    label: "Главная",
+    stage: 1,
+    description: "Dashboard сводки комплекса",
+  },
+  {
+    id: "complexes",
+    label: "Комплексы",
+    stage: 2,
+    description: "Complex & Site Manager",
+  },
+  {
+    id: "catalogs",
+    label: "Мачты и антенны",
+    stage: 4,
+    description: "Mast & Antenna catalogs",
+  },
+  {
     id: "workspace",
     label: "Рабочее пространство",
     stage: 2,
@@ -41,7 +63,7 @@ export const MODULES: readonly ModuleDefinition[] = [
     id: "map",
     label: "Карта",
     stage: 4,
-    description: "MapLibre, офлайн и слои",
+    description: "Terrain Map · рельеф · радиус · радиовидимость",
   },
   {
     id: "stations",
@@ -108,6 +130,12 @@ export const MODULES: readonly ModuleDefinition[] = [
     label: "Архив",
     stage: 8,
     description: "Записи и журналы",
+  },
+  {
+    id: "events",
+    label: "Журнал событий",
+    stage: 9,
+    description: "Event Center",
   },
   {
     id: "inventory",
