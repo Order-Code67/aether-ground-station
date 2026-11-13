@@ -63,7 +63,7 @@ export const MODULES: readonly ModuleDefinition[] = [
     id: "map",
     label: "Карта",
     stage: 4,
-    description: "MapLibre, офлайн и слои",
+    description: "Terrain Map · рельеф · радиус · радиовидимость",
   },
   {
     id: "stations",

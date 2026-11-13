@@ -24,24 +24,15 @@ test("aiming: planner shows controls and corridor toggles", async ({ page }) => 
   await expect(nav).toBeVisible({ timeout: 15_000 });
   await nav.getByLabel("Карта и планирование", { exact: true }).click();
 
-  await expect(page.getByTestId("station-planner")).toBeVisible({
+  await expect(page.getByTestId("terrain-map")).toBeVisible({
     timeout: 15_000,
   });
-
-  const aiming = page.getByLabel("Наведение станции");
-  if (!(await aiming.isVisible().catch(() => false))) {
-    await page.getByRole("button", { name: /Наведение/i }).click();
-  }
-  await expect(aiming).toBeVisible();
-  await expect(page.getByTestId("aiming-controls")).toBeVisible();
-
+  await page.getByRole("button", { name: /Антенны/i }).click();
+  await expect(page.getByTestId("aiming-controls")).toBeVisible({
+    timeout: 10_000,
+  });
   await expect(
     page.getByRole("button", { name: /Точка станции|Клик: точка/i }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: /Направление полёта|Клик: направление/i }),
-  ).toBeVisible();
-  await expect(page.getByRole("button", { name: /Коридор высот/i })).toBeVisible();
-  await expect(page.getByText(/Пресеты наведения/i)).toBeVisible();
-  await expect(page.getByText(/COM углы \(только чтение\)/i)).toBeVisible();
+  await expect(page.getByText(/Радиус действия/i).first()).toBeVisible();
 });

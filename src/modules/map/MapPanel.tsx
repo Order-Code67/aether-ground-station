@@ -40,6 +40,7 @@ import {
 import { getTerrainAdapter } from "@/services/terrain/terrainEngine";
 import { destinationPoint } from "@/utils/geo";
 import { calcAntennaCenterAmsl } from "@/services/stations";
+import { useTerrainMapStore } from "@/stores/terrainMapStore";
 
 interface UserMarker {
   id: string;
@@ -115,6 +116,9 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const setShowRadioHorizon = useStationPlannerStore(
     (s) => s.setShowRadioHorizon,
   );
+  const showRadiusPref = useTerrainMapStore((s) => s.showRadius);
+  const droneEff = useTerrainMapStore((s) => s.effectiveDrone);
+  const demoMode = useTerrainMapStore((s) => s.demoMode);
 
   const [measureMode, setMeasureMode] = useState(false);
   const [labelsOn, setLabelsOn] = useState(true);
@@ -527,7 +531,8 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     on ? "ags-glass-btn ags-glass-btn--active" : "ags-glass-btn";
 
   const rangeRingPath = useMemo(() => {
-    if (!showRangeRing || !active || size.w <= 0) return null;
+    if ((!showRangeRing && !showRadiusPref) || !active || size.w <= 0)
+      return null;
     const pts: string[] = [];
     for (let i = 0; i <= 72; i++) {
       const brg = (i / 72) * 360;
@@ -546,6 +551,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     project,
     rangeKm,
     showRangeRing,
+    showRadiusPref,
     size.w,
   ]);
 
@@ -834,6 +840,67 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
             }}
           >
             B
+          </div>
+        )}
+
+        {(() => {
+          const d = droneEff();
+          if (d.source === "none" || size.w <= 0) return null;
+          const p = project(d.lng, d.lat);
+          const a = active
+            ? project(active.longitude, active.latitude)
+            : null;
+          return (
+            <>
+              {a && (
+                <svg className="pointer-events-none absolute inset-0 z-[3] h-full w-full">
+                  <line
+                    x1={a.x}
+                    y1={a.y}
+                    x2={p.x}
+                    y2={p.y}
+                    stroke="#cfe4ff"
+                    strokeWidth={2}
+                    strokeDasharray="4 5"
+                    strokeOpacity={0.9}
+                  />
+                </svg>
+              )}
+              <div
+                className="absolute z-[5] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-ags-warning px-1.5 py-0.5 text-[9px] font-bold text-black shadow"
+                style={{ left: p.x, top: p.y }}
+                title={
+                  d.source === "demo"
+                    ? "DEMO дрон"
+                    : d.source === "live"
+                      ? "Дрон (телеметрия)"
+                      : "Цель B"
+                }
+              >
+                {d.source === "demo" ? "DEMO" : "Дрон"}
+                {d.amslM != null ? ` · ${d.amslM.toFixed(0)}м` : ""}
+              </div>
+              {demoMode && d.source === "demo" && (
+                <div
+                  className="pointer-events-none absolute z-[5] -translate-x-1/2 text-[9px] text-amber-200"
+                  style={{ left: p.x, top: p.y + 14 }}
+                >
+                  DEMO
+                </div>
+              )}
+            </>
+          );
+        })()}
+
+        {active && (showRangeRing || showRadiusPref) && (
+          <div
+            className="pointer-events-none absolute z-[4] -translate-x-1/2 rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-ags-accent"
+            style={{
+              left: project(active.longitude, active.latitude).x,
+              top: project(active.longitude, active.latitude).y + 18,
+            }}
+          >
+            R = {rangeKm.toFixed(1)} км
           </div>
         )}
 

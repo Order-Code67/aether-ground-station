@@ -1,8 +1,11 @@
-import { StationPlannerView } from "@/modules/planner";
+import { TerrainMapView } from "@/modules/terrainMap";
 
-/** Default planning map tab = unified 4-pane Station Planner (GS-3). */
+/**
+ * Planning «Карта» tab = TZ Terrain Map (2D slippy + 3D DEM + Fresnel profile).
+ * Station Planner glass layout remains available via aiming / antennas tab.
+ */
 export function MapView() {
-  return <StationPlannerView />;
+  return <TerrainMapView />;
 }
 
 export { MapPanel } from "./MapPanel";

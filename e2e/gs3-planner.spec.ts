@@ -29,15 +29,11 @@ test("GS-3: Station Planner 4-pane reachable from map section", async ({
   await expect(nav).toBeVisible({ timeout: 15_000 });
   await nav.getByLabel("Карта и планирование", { exact: true }).click();
 
-  await expect(page.getByTestId("station-planner")).toBeVisible({
+  await expect(page.getByTestId("terrain-map")).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByLabel("Дерево объектов")).toBeVisible();
-  const aiming = page.getByLabel("Наведение станции");
-  if (!(await aiming.isVisible().catch(() => false))) {
-    await page.getByRole("button", { name: /Наведение/i }).click();
-  }
-  await expect(aiming).toBeVisible();
-  await expect(page.getByLabel("Инженерная панель")).toBeVisible();
-  await expect(page.getByLabel("Поворотный механизм")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Карта$/i })).toBeVisible();
+  await expect(page.getByText(/Параметры связи/i)).toBeVisible();
+  await expect(page.getByText(/Поворотный механизм/i)).toBeVisible();
+  await expect(page.getByText(/Профиль высот/i)).toBeVisible();
 });
