@@ -1,5 +1,6 @@
 import { useStationPlannerStore } from "@/stores/stationPlannerStore";
 import { useTerrainMapStore } from "@/stores/terrainMapStore";
+import { useGisStore } from "@/stores/gisStore";
 import {
   radioVisibilityLabel,
   radioVisibilityTone,
@@ -112,30 +113,53 @@ export function LinkSidebar({
       : "rounded border border-ags-border px-2 py-1 text-[10px]";
 
   return (
-    <aside className="flex h-full min-h-0 w-72 shrink-0 flex-col gap-2 overflow-auto border-l border-ags-border-subtle bg-ags-panel/95 p-3 text-xs backdrop-blur-md">
-      <section className="space-y-2 rounded border border-ags-border/60 p-2">
+    <aside className="flex h-full min-h-0 w-[18.5rem] shrink-0 flex-col gap-2.5 overflow-auto border-l border-ags-border-subtle bg-ags-panel/95 p-3 text-xs backdrop-blur-md">
+      <section className="ags-panel space-y-2.5 p-2.5">
         <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ags-muted">
-          Точки на карте
+          Объекты на карте
         </h3>
         <div className="flex flex-wrap gap-1">
           <button
             type="button"
             className={pickBtn(pickStationPos)}
-            onClick={() => setPickStationPos(!pickStationPos)}
+            onClick={() => {
+              const next = !pickStationPos;
+              setPickStationPos(next);
+              if (next) {
+                useGisStore.getState().setTool("none");
+                useGisStore.getState().setBottomPanelOpen(true);
+                useTerrainMapStore.getState().setTab("map");
+              }
+            }}
           >
             {pickStationPos ? "Клик: НСУ…" : "Поставить НСУ"}
           </button>
           <button
             type="button"
             className={pickBtn(pickLookAt)}
-            onClick={() => setPickLookAt(!pickLookAt)}
+            onClick={() => {
+              const next = !pickLookAt;
+              setPickLookAt(next);
+              if (next) {
+                useGisStore.getState().setTool("none");
+                useGisStore.getState().setBottomPanelOpen(true);
+                useTerrainMapStore.getState().setTab("map");
+              }
+            }}
           >
             {pickLookAt ? "Клик: цель…" : "Поставить цель B"}
           </button>
           <button
             type="button"
             className={pickBtn(pickMarker)}
-            onClick={() => setPickMarker(!pickMarker)}
+            onClick={() => {
+              const next = !pickMarker;
+              setPickMarker(next);
+              if (next) {
+                useGisStore.getState().setTool("none");
+                useTerrainMapStore.getState().setTab("map");
+              }
+            }}
           >
             {pickMarker ? "Клик: точка…" : "Своя точка"}
           </button>
@@ -190,7 +214,7 @@ export function LinkSidebar({
         </p>
       </section>
 
-      <section className="space-y-1.5 rounded border border-ags-warning/30 bg-ags-elevated/40 p-2">
+      <section className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-2.5 py-2">
         <p className="text-[9px] leading-snug text-ags-dim">
           Радиовидимость по DEM/Френелю — геометрия, не качество канала. Помехи,
           многолучевость и объекты вне DEM не учитываются.
@@ -198,7 +222,7 @@ export function LinkSidebar({
       </section>
 
       {st && (
-        <section className="space-y-1 rounded border border-ags-border/60 p-2">
+        <section className="ags-panel space-y-1.5 p-2.5">
           <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ags-muted">
             Станция (НСУ)
           </h3>
@@ -221,37 +245,39 @@ export function LinkSidebar({
         </section>
       )}
 
-      <section className="space-y-1.5 rounded border border-ags-border/60 p-2">
-        <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ags-muted">
-          Параметры связи
-        </h3>
-        <div className="flex items-center gap-2 text-[11px]">
-          <ToneDot tone={tone} />
-          <span>{radioVisibilityLabel(status)}</span>
+      <section className="ags-panel space-y-2 p-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ags-muted">
+            Параметры связи
+          </h3>
+          <div className="flex items-center gap-1.5 text-[11px]">
+            <ToneDot tone={tone} />
+            <span className="font-medium">{radioVisibilityLabel(status)}</span>
+          </div>
         </div>
         <dl className="grid grid-cols-[7.5rem_1fr] gap-y-1 font-mono text-[11px]">
           <dt className="text-ags-dim">Расстояние</dt>
           <dd>{nd(distanceM != null ? distanceM / 1000 : null, 2, " км")}</dd>
           <dt className="text-ags-dim">Перепад высот</dt>
-          <dd>
+          <dd title="Цель AMSL − антенна НСУ AMSL по линии направления">
             {deltaHeightM == null
-              ? "Нет данных"
+              ? "Нет данных — поставьте НСУ и цель B"
               : `${deltaHeightM >= 0 ? "+" : ""}${deltaHeightM.toFixed(0)} м`}
           </dd>
           <dt className="text-ags-dim">Азимут</dt>
           <dd>{nd(azimuthDeg, 1, "°")}</dd>
           <dt className="text-ags-dim">Угол места</dt>
           <dd>{nd(elevationDeg, 2, "°")}</dd>
-          <dt className="text-ags-dim">Высота НСУ</dt>
+          <dt className="text-ags-dim">НСУ (антенна)</dt>
           <dd>{nd(stationAmsl, 0, " м")}</dd>
-          <dt className="text-ags-dim">Высота дрона</dt>
+          <dt className="text-ags-dim">Цель / рельеф</dt>
           <dd>{nd(droneAmsl, 0, " м")}</dd>
           <dt className="text-ags-dim">Частота</dt>
           <dd>{freqGhz.toFixed(2)} ГГц</dd>
         </dl>
       </section>
 
-      <section className="space-y-2 rounded border border-ags-border/60 p-2">
+      <section className="ags-panel space-y-2.5 p-2.5">
         <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ags-muted">
           Поворотный механизм
         </h3>
@@ -318,7 +344,7 @@ export function LinkSidebar({
         </p>
       </section>
 
-      <section className="space-y-2 rounded border border-ags-border/60 p-2">
+      <section className="ags-panel space-y-2.5 p-2.5">
         <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ags-muted">
           Радиус и антенна
         </h3>

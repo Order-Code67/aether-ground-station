@@ -33,7 +33,8 @@ export interface LinkProfileResult {
   maxObstacleAtM: number | null;
   deltaHeightM: number | null;
   azimuthDeg: number;
-  elevationDeg: number;
+  /** Null when AMSL at A or B unknown — do not invent 0°. */
+  elevationDeg: number | null;
   disclaimer: string;
 }
 
@@ -73,7 +74,7 @@ export async function computeLinkProfile(opts: {
     Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
   const azimuthDeg = (((Math.atan2(y, x) * 180) / Math.PI) + 360) % 360;
 
-  let elevationDeg = 0;
+  let elevationDeg: number | null = null;
   if (stationAntennaAmslM != null && targetAmslM != null && distanceM > 1) {
     const curve = (distanceM * distanceM) / (2 * R_RADIO_M);
     elevationDeg =

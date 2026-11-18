@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useStationPlannerStore } from "@/stores/stationPlannerStore";
+import { useTerrainMapStore } from "@/stores/terrainMapStore";
+import { useGisStore } from "@/stores/gisStore";
 import {
   deleteAimingPreset,
   listAimingPresets,
@@ -20,6 +22,18 @@ import {
 import { isTauriRuntime } from "@/services/tauri";
 import { eventBus } from "@/services/events/eventBus";
 import type { SerialPortInfo } from "@/types";
+
+function armMapPick(
+  enable: boolean,
+  setPick: (v: boolean) => void,
+) {
+  setPick(enable);
+  if (enable) {
+    useGisStore.getState().setTool("none");
+    useTerrainMapStore.getState().setTab("map");
+    useGisStore.getState().setBottomPanelOpen(true);
+  }
+}
 
 /**
  * Manual station aiming — point, heading, range, patches, mast, servos.
@@ -102,7 +116,7 @@ export function AimingControls() {
                 ? "rounded bg-ags-accent px-2 py-1 text-white"
                 : "rounded border border-ags-border px-2 py-1"
             }
-            onClick={() => setPickStationPos(!pickStationPos)}
+            onClick={() => armMapPick(!pickStationPos, setPickStationPos)}
           >
             {pickStationPos ? "Клик: НСУ…" : "Поставить НСУ"}
           </button>
@@ -113,7 +127,7 @@ export function AimingControls() {
                 ? "rounded bg-ags-accent px-2 py-1 text-white"
                 : "rounded border border-ags-border px-2 py-1"
             }
-            onClick={() => setPickLookAt(!pickLookAt)}
+            onClick={() => armMapPick(!pickLookAt, setPickLookAt)}
           >
             {pickLookAt ? "Клик: цель…" : "Поставить цель B"}
           </button>
@@ -236,7 +250,7 @@ export function AimingControls() {
               ? "rounded bg-ags-accent px-2 py-1 text-white"
               : "rounded border border-ags-border px-2 py-1"
           }
-          onClick={() => setPickStationPos(!pickStationPos)}
+          onClick={() => armMapPick(!pickStationPos, setPickStationPos)}
         >
           {pickStationPos ? "Клик: НСУ…" : "Поставить НСУ"}
         </button>
@@ -247,7 +261,7 @@ export function AimingControls() {
               ? "rounded bg-ags-accent px-2 py-1 text-white"
               : "rounded border border-ags-border px-2 py-1"
           }
-          onClick={() => setPickLookAt(!pickLookAt)}
+          onClick={() => armMapPick(!pickLookAt, setPickLookAt)}
         >
           {pickLookAt ? "Клик: цель…" : "Поставить цель B"}
         </button>

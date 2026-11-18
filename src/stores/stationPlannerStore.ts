@@ -11,7 +11,12 @@ import {
   listAntennaMounts,
   listAntennaProfiles,
 } from "@/services/catalogs";
-import { listStations, upsertStation } from "@/services/stations";
+import {
+  calcAntennaCenterAmsl,
+  listStations,
+  upsertStation,
+} from "@/services/stations";
+import { eventBus } from "@/services/events/eventBus";
 import { clampAngle, destinationPoint } from "@/utils/geo";
 
 export type PanTiltMode = "simulation" | "monitoring" | "local-status";
@@ -388,16 +393,64 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
     }
 
     const existing = stations.find((s) => s.id === activeStationId);
+
+    const commitLocal = (st: Station, isNew: boolean) => {
+      const list = get().stations;
+      const i = list.findIndex((x) => x.id === st.id);
+      const nextList =
+        i < 0 ? [...list, st] : list.map((x, idx) => (idx === i ? st : x));
+      if (isNew) {
+        const b = destinationPoint(
+          lat,
+          lng,
+          get().simAzimuthDeg,
+          DEFAULT_LOOK_AT_M,
+        );
+        set({
+          stations: nextList,
+          activeStationId: st.id,
+          pickStationPos: false,
+          lookAt: b,
+        });
+      } else {
+        set({
+          stations: nextList,
+          activeStationId: st.id,
+          pickStationPos: false,
+        });
+        get().syncLookAtFromAzimuth();
+      }
+    };
+
     if (existing) {
-      const next = {
+      const terrainElevationM = elev ?? existing.terrainElevationM ?? null;
+      const next: Station = {
         ...existing,
         latitude: lat,
         longitude: lng,
-        terrainElevationM: elev ?? existing.terrainElevationM ?? null,
+        terrainElevationM,
+        antennaCenterAmslM: calcAntennaCenterAmsl(
+          terrainElevationM,
+          existing.mastHeightM,
+          existing.antennaOffsetM,
+        ),
+        updatedAt: new Date().toISOString(),
       };
-      await get().saveStation(next);
-      set({ pickStationPos: false });
-      get().syncLookAtFromAzimuth();
+      try {
+        await upsertStation(next);
+        await get().refresh();
+        set({ activeStationId: next.id, pickStationPos: false });
+        get().syncLookAtFromAzimuth();
+      } catch (e) {
+        commitLocal(next, false);
+        eventBus.emit(
+          "warning",
+          "map",
+          e instanceof Error
+            ? `НСУ сдвинута локально: ${e.message}`
+            : "НСУ сдвинута локально (без записи в БД)",
+        );
+      }
       return next;
     }
 
@@ -412,22 +465,34 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
       terrainElevationM: elev,
       mastHeightM: 15,
       antennaOffsetM: 0,
-      antennaCenterAmslM: null,
+      antennaCenterAmslM: calcAntennaCenterAmsl(elev, 15, 0),
       payload: "{}",
       updatedAt: new Date().toISOString(),
     };
-    await get().saveStation(st);
-    const b = destinationPoint(
-      lat,
-      lng,
-      get().simAzimuthDeg,
-      DEFAULT_LOOK_AT_M,
-    );
-    set({
-      activeStationId: st.id,
-      pickStationPos: false,
-      lookAt: b,
-    });
+    try {
+      await upsertStation(st);
+      await get().refresh();
+      const b = destinationPoint(
+        lat,
+        lng,
+        get().simAzimuthDeg,
+        DEFAULT_LOOK_AT_M,
+      );
+      set({
+        activeStationId: st.id,
+        pickStationPos: false,
+        lookAt: b,
+      });
+    } catch (e) {
+      commitLocal(st, true);
+      eventBus.emit(
+        "warning",
+        "map",
+        e instanceof Error
+          ? `НСУ создана локально: ${e.message}`
+          : "НСУ создана локально (без записи в БД)",
+      );
+    }
     return st;
   },
 

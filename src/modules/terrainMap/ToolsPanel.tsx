@@ -1,5 +1,6 @@
 import { useGisStore, type GisTool } from "@/stores/gisStore";
 import { useTerrainMapStore } from "@/stores/terrainMapStore";
+import { useStationPlannerStore } from "@/stores/stationPlannerStore";
 
 const TOOLS: { id: GisTool; label: string }[] = [
   { id: "measureDistance", label: "Расстояние" },
@@ -63,7 +64,16 @@ export function ToolsPanel() {
                 ? "rounded bg-ags-accent px-1.5 py-0.5 text-[10px] text-white"
                 : "rounded border border-ags-border px-1.5 py-0.5 text-[10px]"
             }
-            onClick={() => setTool(tool === t.id ? "none" : t.id)}
+            onClick={() => {
+              const next = tool === t.id ? "none" : t.id;
+              setTool(next);
+              if (next !== "none") {
+                const p = useStationPlannerStore.getState();
+                if (p.pickStationPos) p.setPickStationPos(false);
+                if (p.pickLookAt) p.setPickLookAt(false);
+                if (p.pickMarker) p.setPickMarker(false);
+              }
+            }}
           >
             {t.label}
           </button>

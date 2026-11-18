@@ -509,8 +509,67 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     const sy = e.clientY - rect.top;
     const { lon, lat } = unproject(sx, sy);
 
+    // Manual НСУ / цель / точки — выше GIS-инструментов (иначе Δ высоты и т.п. глотают клик).
+    if (pickStationPosRef.current) {
+      setGisTool("none");
+      void placeOrMoveNsu(lat, lon)
+        .then((st) => {
+          setStations((prev) => {
+            const i = prev.findIndex((x) => x.id === st.id);
+            if (i < 0) return [...prev, st];
+            const next = [...prev];
+            next[i] = st;
+            return next;
+          });
+          eventBus.emit(
+            "info",
+            "map",
+            `НСУ: ${st.latitude.toFixed(5)}, ${st.longitude.toFixed(5)}`,
+          );
+        })
+        .catch((err) => {
+          eventBus.emit(
+            "error",
+            "map",
+            err instanceof Error ? err.message : "Не удалось поставить НСУ",
+          );
+        });
+      return;
+    }
+
+    if (pickLookAtRef.current) {
+      setGisTool("none");
+      const state = useStationPlannerStore.getState();
+      const st = state.stations.find((s) => s.id === state.activeStationId);
+      setLookAt({ lat, lng: lon });
+      if (st) {
+        const brg = bearingDeg(
+          { lat: st.latitude, lng: st.longitude },
+          { lat, lng: lon },
+        );
+        let signed = brg > 180 ? brg - 360 : brg;
+        const { azMin, azMax } = state.panTiltRanges;
+        signed = Math.min(azMax, Math.max(azMin, signed));
+        setSimAzimuthDeg(signed);
+      }
+      eventBus.emit("info", "map", "Цель / направление задано");
+      return;
+    }
+
+    if (pickMarkerRef.current) {
+      setGisTool("none");
+      addMapMarker(lat, lon);
+      eventBus.emit("info", "map", "Точка добавлена");
+      return;
+    }
+
     const tool = useGisStore.getState().tool;
-    if (tool === "measureDistance" || tool === "measureArea" || tool === "measureAzimuth" || tool === "measureDeltaH") {
+    if (
+      tool === "measureDistance" ||
+      tool === "measureArea" ||
+      tool === "measureAzimuth" ||
+      tool === "measureDeltaH"
+    ) {
       void pushMeasurePoint(lat, lon).then((r) => {
         if (r === "done") eventBus.emit("info", "map", "Измерение сохранено");
       });
@@ -536,48 +595,6 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
       setProfileOverrideB({ lat, lng: lon });
       setGisTool("none");
       eventBus.emit("info", "map", "Профиль: точка B");
-      return;
-    }
-
-    if (pickStationPosRef.current) {
-      void placeOrMoveNsu(lat, lon).then((st) => {
-        setStations((prev) => {
-          const i = prev.findIndex((x) => x.id === st.id);
-          if (i < 0) return [...prev, st];
-          const next = [...prev];
-          next[i] = st;
-          return next;
-        });
-        eventBus.emit(
-          "info",
-          "map",
-          `НСУ: ${st.latitude.toFixed(5)}, ${st.longitude.toFixed(5)}`,
-        );
-      });
-      return;
-    }
-
-    if (pickLookAtRef.current) {
-      const state = useStationPlannerStore.getState();
-      const st = state.stations.find((s) => s.id === state.activeStationId);
-      setLookAt({ lat, lng: lon });
-      if (st) {
-        const brg = bearingDeg(
-          { lat: st.latitude, lng: st.longitude },
-          { lat, lng: lon },
-        );
-        let signed = brg > 180 ? brg - 360 : brg;
-        const { azMin, azMax } = state.panTiltRanges;
-        signed = Math.min(azMax, Math.max(azMin, signed));
-        setSimAzimuthDeg(signed);
-      }
-      eventBus.emit("info", "map", "Цель / направление задано");
-      return;
-    }
-
-    if (pickMarkerRef.current) {
-      addMapMarker(lat, lon);
-      eventBus.emit("info", "map", "Точка добавлена");
       return;
     }
 
@@ -902,9 +919,31 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
               x2={project(lookAt.lng, lookAt.lat).x}
               y2={project(lookAt.lng, lookAt.lat).y}
               stroke="#f0c14a"
-              strokeWidth={2}
+              strokeWidth={2.25}
+              strokeDasharray="7 5"
+              strokeOpacity={0.95}
             />
           )}
+          {/* Range ring distance ticks (like reference GCS) */}
+          {plannerMode &&
+            active &&
+            layers.radius &&
+            (showRangeRing || showRadiusPref) &&
+            [0.25, 0.5, 0.75, 1].map((frac) => {
+              const dM = rangeKm * 1000 * frac;
+              const p = destinationPoint(
+                active.latitude,
+                active.longitude,
+                ((simAzimuthDeg % 360) + 360) % 360,
+                dM,
+              );
+              const s = project(p.lng, p.lat);
+              return (
+                <g key={`rr-${frac}`}>
+                  <circle cx={s.x} cy={s.y} r={2.5} fill="#ffffffcc" />
+                </g>
+              );
+            })}
         </svg>
 
         {/* Smart place labels */}
@@ -924,28 +963,65 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
             );
           })}
 
-        {/* Station markers */}
+        {/* Station markers — professional callouts */}
         {layers.station &&
           displayStations.map((s) => {
           const p = project(s.longitude, s.latitude);
           const isActive = s.id === activeStationId;
+          const hLabel =
+            s.antennaCenterAmslM != null
+              ? `${s.antennaCenterAmslM.toFixed(0)} м`
+              : s.terrainElevationM != null
+                ? `${s.terrainElevationM.toFixed(0)} м`
+                : null;
           return (
             <button
               key={s.id}
               type="button"
-              title={s.name}
-              className={
-                isActive
-                  ? "absolute z-[2] h-4 w-4 -translate-x-1/2 -translate-y-1/2 rotate-45 border-2 border-ags-accent bg-ags-warning shadow"
-                  : "absolute z-[2] h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border-2 border-ags-warning bg-ags-elevated shadow"
-              }
+              title={`${s.name} · клик — выбрать`}
+              className="absolute z-[3] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
               style={{ left: p.x, top: p.y }}
               onClick={(ev) => {
+                if (pickStationPos || pickLookAt || pickMarker) return;
                 ev.stopPropagation();
                 setActiveStationId(s.id);
               }}
-              onPointerDown={(ev) => ev.stopPropagation()}
-            />
+              onPointerDown={(ev) => {
+                if (pickStationPos || pickLookAt || pickMarker) return;
+                ev.stopPropagation();
+              }}
+            >
+              <span
+                className={
+                  isActive
+                    ? "flex h-7 w-7 items-center justify-center rounded-lg border-2 border-white bg-amber-500 shadow-[0_0_16px_rgba(240,193,74,0.55)]"
+                    : "flex h-6 w-6 items-center justify-center rounded-lg border border-white/70 bg-amber-600/90 shadow"
+                }
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <path
+                    d="M12 3v10M8 7l4-4 4 4M6 21h12M9 21v-4h6v4"
+                    stroke="#111"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </span>
+              <span className="ags-glass-bar max-w-[9rem] px-1.5 py-1 text-left text-[9px] leading-tight text-ags-fg">
+                <span className="block font-semibold text-amber-300">
+                  {s.name || "НСУ"}
+                </span>
+                <span className="block font-mono text-[8px] text-ags-muted">
+                  {s.latitude.toFixed(5)}, {s.longitude.toFixed(5)}
+                </span>
+                {hLabel && (
+                  <span className="block font-mono text-[8px] text-ags-fg">
+                    H: {hLabel}
+                  </span>
+                )}
+              </span>
+            </button>
           );
         })}
 
@@ -960,10 +1036,14 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
               className="absolute z-[2] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
               style={{ left: p.x, top: p.y }}
               onClick={(ev) => {
+                if (pickStationPos || pickLookAt || pickMarker) return;
                 ev.stopPropagation();
                 removeMapMarker(m.id);
               }}
-              onPointerDown={(ev) => ev.stopPropagation()}
+              onPointerDown={(ev) => {
+                if (pickStationPos || pickLookAt || pickMarker) return;
+                ev.stopPropagation();
+              }}
             >
               <span className="h-3 w-3 rounded-full border-2 border-white bg-sky-400 shadow" />
               <span className="mt-0.5 max-w-[5rem] truncate rounded bg-black/60 px-1 text-[8px] text-white">
@@ -975,26 +1055,99 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
 
         {layers.drone && plannerMode && lookAt && (
           <div
-            className="absolute z-[2] flex h-4 w-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-ags-accent text-[8px] font-bold text-white shadow"
+            className="pointer-events-none absolute z-[3] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
             style={{
               left: project(lookAt.lng, lookAt.lat).x,
               top: project(lookAt.lng, lookAt.lat).y,
             }}
             title="Цель B"
           >
-            B
+            <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-ags-accent shadow-[0_0_14px_rgba(61,139,253,0.5)]">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path
+                  d="M12 4l3 6h5l-4 3.5 1.5 6.5L12 16l-5.5 4 1.5-6.5L4 10h5l3-6z"
+                  fill="#fff"
+                />
+              </svg>
+            </span>
+            <span className="ags-glass-bar px-1.5 py-0.5 text-[9px] font-semibold text-sky-200">
+              Цель B
+            </span>
           </div>
         )}
 
-        {layers.station && plannerMode && active && (
+        {plannerMode && active && lookAt && (
           <div
-            className="pointer-events-none absolute z-[3] -translate-x-1/2 translate-y-2 rounded bg-black/65 px-1.5 py-0.5 text-[9px] font-semibold text-ags-warning"
+            className="pointer-events-none absolute z-[4] -translate-x-1/2 -translate-y-1/2"
             style={{
-              left: project(active.longitude, active.latitude).x,
-              top: project(active.longitude, active.latitude).y,
+              left:
+                (project(active.longitude, active.latitude).x +
+                  project(lookAt.lng, lookAt.lat).x) /
+                2,
+              top:
+                (project(active.longitude, active.latitude).y +
+                  project(lookAt.lng, lookAt.lat).y) /
+                2,
             }}
           >
-            НСУ
+            <span className="ags-glass-bar px-2 py-0.5 font-mono text-[10px] font-semibold text-amber-200">
+              {(
+                haversineM(
+                  { lat: active.latitude, lng: active.longitude },
+                  { lat: lookAt.lat, lng: lookAt.lng },
+                ) / 1000
+              ).toFixed(2)}{" "}
+              км
+            </span>
+          </div>
+        )}
+
+        {plannerMode &&
+          active &&
+          layers.radius &&
+          (showRangeRing || showRadiusPref) &&
+          [0.25, 0.5, 0.75, 1].map((frac) => {
+            const dM = rangeKm * 1000 * frac;
+            const p = destinationPoint(
+              active.latitude,
+              active.longitude,
+              ((simAzimuthDeg % 360) + 360) % 360,
+              dM,
+            );
+            const s = project(p.lng, p.lat);
+            return (
+              <div
+                key={`rr-lbl-${frac}`}
+                className="pointer-events-none absolute z-[2] -translate-x-1/2 -translate-y-1/2 rounded bg-black/55 px-1 py-0.5 font-mono text-[9px] text-white/90"
+                style={{ left: s.x + 10, top: s.y - 8 }}
+              >
+                {(dM / 1000).toFixed(1)} км
+              </div>
+            );
+          })}
+
+        {/* Azimuth compass HUD */}
+        {plannerMode && (
+          <div className="ags-glass-panel pointer-events-none absolute right-3 top-14 z-10 flex h-[5.25rem] w-[5.25rem] flex-col items-center justify-center gap-0.5">
+            <div className="relative h-14 w-14 rounded-full border border-white/25 bg-black/20">
+              <span className="absolute left-1/2 top-0.5 -translate-x-1/2 text-[9px] font-bold text-ags-accent">
+                N
+              </span>
+              <div
+                className="absolute inset-0 flex items-center justify-center"
+                style={{
+                  transform: `rotate(${((simAzimuthDeg % 360) + 360) % 360}deg)`,
+                }}
+              >
+                <div className="mb-5 h-5 w-0.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(240,193,74,0.8)]" />
+              </div>
+              <span className="absolute inset-0 flex items-center justify-center font-mono text-[11px] font-semibold text-ags-fg">
+                {(((simAzimuthDeg % 360) + 360) % 360).toFixed(0)}°
+              </span>
+            </div>
+            <span className="text-[8px] uppercase tracking-wide text-ags-muted">
+              Азимут
+            </span>
           </div>
         )}
 
@@ -1196,8 +1349,13 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
               className={toolBtn(pickStationPos)}
               title="Клик по карте — поставить / сдвинуть НСУ"
               onClick={() => {
-                setPickStationPos(!pickStationPos);
+                const next = !pickStationPos;
+                setPickStationPos(next);
                 setMeasureMode(false);
+                if (next) {
+                  setGisTool("none");
+                  useGisStore.getState().setBottomPanelOpen(true);
+                }
               }}
             >
               {pickStationPos ? "Клик: НСУ…" : "НСУ"}
@@ -1207,8 +1365,13 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
               className={toolBtn(pickLookAt)}
               title="Клик по карте — цель / направление B"
               onClick={() => {
-                setPickLookAt(!pickLookAt);
+                const next = !pickLookAt;
+                setPickLookAt(next);
                 setMeasureMode(false);
+                if (next) {
+                  setGisTool("none");
+                  useGisStore.getState().setBottomPanelOpen(true);
+                }
               }}
             >
               {pickLookAt ? "Клик: цель…" : "Цель B"}
@@ -1218,8 +1381,10 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
               className={toolBtn(pickMarker)}
               title="Клик по карте — свободная точка"
               onClick={() => {
-                setPickMarker(!pickMarker);
+                const next = !pickMarker;
+                setPickMarker(next);
                 setMeasureMode(false);
+                if (next) setGisTool("none");
               }}
             >
               {pickMarker ? "Клик: точка…" : "Точка"}

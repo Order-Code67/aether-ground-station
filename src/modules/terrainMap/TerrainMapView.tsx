@@ -51,6 +51,7 @@ export function TerrainMapView() {
   const refresh = useStationPlannerStore((s) => s.refresh);
   const rangeKm = useStationPlannerStore((s) => s.rangeKm);
   const simAz = useStationPlannerStore((s) => s.simAzimuthDeg);
+  const lookAt = useStationPlannerStore((s) => s.lookAt);
   const st = stations.find((s) => s.id === activeStationId);
 
   const leftOpen = useGisStore((s) => s.leftPanelOpen);
@@ -66,7 +67,7 @@ export function TerrainMapView() {
   const [profile, setProfile] = useState<LinkProfileResult | null>(null);
   const [stationAmsl, setStationAmsl] = useState<number | null>(null);
   const [droneAmsl, setDroneAmsl] = useState<number | null>(null);
-  const [profileH, setProfileH] = useState(168);
+  const [profileH, setProfileH] = useState(200);
   const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
@@ -117,11 +118,19 @@ export function TerrainMapView() {
       let dAmsl = drone.amslM;
       if (dAmsl == null && drone.aglM != null) {
         const s = await getTerrainAdapter().sample(bLat, bLng);
-        if (!s.missing && s.elevationM != null) dAmsl = s.elevationM + drone.aglM;
+        if (!s.missing && s.elevationM != null) {
+          dAmsl = s.elevationM + drone.aglM;
+        }
       }
-      if (dAmsl == null && profileB) {
+      // Цель B / lookAt / override: высота поверхности DEM по направлению от НСУ.
+      if (
+        dAmsl == null &&
+        (profileB != null ||
+          drone.source === "lookAt" ||
+          drone.source === "demo")
+      ) {
         const s = await getTerrainAdapter().sample(bLat, bLng);
-        if (!s.missing) dAmsl = s.elevationM;
+        if (!s.missing && s.elevationM != null) dAmsl = s.elevationM;
       }
       if (cancelled) return;
       setDroneAmsl(dAmsl ?? null);
@@ -153,6 +162,8 @@ export function TerrainMapView() {
     simAz,
     rangeKm,
     demoMode,
+    lookAt?.lat,
+    lookAt?.lng,
     effectiveDrone,
     profileA?.lat,
     profileA?.lng,
@@ -168,61 +179,70 @@ export function TerrainMapView() {
 
   return (
     <div className={shellClass} data-testid="terrain-map">
-      <div className="flex flex-wrap items-center gap-1 border-b border-ags-border-subtle px-3 py-1.5">
-        <span className="mr-2 text-sm font-semibold text-ags-fg">
-          Terrain & GIS
-        </span>
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-ags-border-subtle bg-ags-panel/80 px-3 py-2 backdrop-blur-md">
+        <div className="mr-2 flex items-center gap-2">
+          <span className="ags-brand-mark h-2 w-2 rounded-full bg-ags-accent" />
+          <span className="text-sm font-semibold tracking-wide text-ags-fg">
+            Карта · рельеф · НСУ
+          </span>
+        </div>
         {TABS.map(([id, label]) => (
           <button
             key={id}
             type="button"
             className={
               tab === id
-                ? "rounded bg-ags-accent px-2.5 py-1 text-xs text-white"
-                : "rounded border border-ags-border px-2.5 py-1 text-xs text-ags-muted"
+                ? "rounded-md bg-ags-accent px-3 py-1.5 text-xs font-medium text-white shadow-sm"
+                : "rounded-md px-3 py-1.5 text-xs text-ags-muted hover:bg-ags-elevated/80 hover:text-ags-fg"
             }
             onClick={() => setTab(id)}
           >
             {label}
           </button>
         ))}
-        <button
-          type="button"
-          className={
-            view3d
-              ? "ml-auto rounded bg-ags-elevated px-2 py-1 text-xs text-ags-accent"
-              : "ml-auto rounded border border-ags-border px-2 py-1 text-xs"
-          }
-          onClick={() => setView3d(!view3d)}
-        >
-          3D
-        </button>
-        <button
-          type="button"
-          className="rounded border border-ags-border px-2 py-1 text-xs"
-          onClick={() => setLeftOpen(!leftOpen)}
-        >
-          {leftOpen ? "Слои ▾" : "Слои"}
-        </button>
-        <button
-          type="button"
-          className="rounded border border-ags-border px-2 py-1 text-xs"
-          onClick={() => setBottomOpen(!bottomOpen)}
-        >
-          Профиль
-        </button>
-        <button
-          type="button"
-          className="rounded border border-ags-border px-2 py-1 text-xs"
-          onClick={() => setFullscreen((v) => !v)}
-        >
-          {fullscreen ? "Выйти" : "Полный экран"}
-        </button>
-        {demoMode && (
-          <span className="rounded bg-amber-600/90 px-2 py-0.5 text-[10px] font-bold text-white">
-            DEMO
-          </span>
-        )}
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            type="button"
+            className={
+              view3d
+                ? "ags-glass-btn ags-glass-btn--active text-xs"
+                : "ags-glass-btn text-xs"
+            }
+            onClick={() => setView3d(!view3d)}
+          >
+            3D
+          </button>
+          <button
+            type="button"
+            className="ags-glass-btn text-xs"
+            onClick={() => setLeftOpen(!leftOpen)}
+          >
+            {leftOpen ? "Слои ▾" : "Слои"}
+          </button>
+          <button
+            type="button"
+            className={
+              bottomOpen
+                ? "ags-glass-btn ags-glass-btn--active text-xs"
+                : "ags-glass-btn text-xs"
+            }
+            onClick={() => setBottomOpen(!bottomOpen)}
+          >
+            Профиль высот
+          </button>
+          <button
+            type="button"
+            className="ags-glass-btn text-xs"
+            onClick={() => setFullscreen((v) => !v)}
+          >
+            {fullscreen ? "Выйти" : "Полный экран"}
+          </button>
+          {demoMode && (
+            <span className="rounded-md bg-amber-600/90 px-2 py-1 text-[10px] font-bold text-white">
+              DEMO
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -325,18 +345,18 @@ export function TerrainMapView() {
 
       {bottomOpen && (
         <div
-          className="shrink-0 border-t border-ags-border-subtle bg-ags-panel/95"
+          className="shrink-0 border-t border-ags-border-subtle bg-gradient-to-b from-ags-panel to-ags-bg/95"
           style={{ height: profileH }}
         >
           <div
-            className="h-1 cursor-row-resize bg-ags-border/40 hover:bg-ags-accent/40"
+            className="h-1.5 cursor-row-resize bg-ags-border/30 hover:bg-ags-accent/50"
             onMouseDown={(e) => {
               e.preventDefault();
               const startY = e.clientY;
               const startH = profileH;
               const onMove = (ev: MouseEvent) => {
                 setProfileH(
-                  Math.min(320, Math.max(100, startH - (ev.clientY - startY))),
+                  Math.min(360, Math.max(140, startH - (ev.clientY - startY))),
                 );
               };
               const onUp = () => {
@@ -347,21 +367,10 @@ export function TerrainMapView() {
               window.addEventListener("mouseup", onUp);
             }}
           />
-          <div className="flex items-center justify-between px-2 py-0.5 text-[9px] text-ags-dim">
-            <span>
-              Профиль высот · Френеля{" "}
-              {layers.fresnel ? "вкл" : "выкл в слоях"} · не гарантия RF
-            </span>
-            <span>
-              {profile
-                ? `${(profile.distanceM / 1000).toFixed(2)} км · Δh ${
-                    profile.deltaHeightM?.toFixed(0) ?? "Н/Д"
-                  } м`
-                : "Нет линии A–B"}
-            </span>
-          </div>
           <ElevationProfileChart
-            profile={layers.fresnel || layers.los ? profile : profile}
+            profile={profile}
+            stationAmsl={stationAmsl}
+            targetAmsl={droneAmsl}
             stationLabel={profileA ? "A" : "НСУ"}
             droneLabel={
               profileB
