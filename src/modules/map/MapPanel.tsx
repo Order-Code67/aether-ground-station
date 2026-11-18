@@ -100,6 +100,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const setPickLookAt = useStationPlannerStore((s) => s.setPickLookAt);
   const setPickMarker = useStationPlannerStore((s) => s.setPickMarker);
   const placeOrMoveNsu = useStationPlannerStore((s) => s.placeOrMoveNsu);
+  const removeStation = useStationPlannerStore((s) => s.removeStation);
   const addMapMarker = useStationPlannerStore((s) => s.addMapMarker);
   const removeMapMarker = useStationPlannerStore((s) => s.removeMapMarker);
   const setSimAzimuthDeg = useStationPlannerStore((s) => s.setSimAzimuthDeg);
@@ -947,8 +948,11 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
             })}
         </svg>
 
-        {/* Smart place labels */}
+        {/* Place labels — under station icons, never capture clicks */}
         {labelsOn &&
+          !pickStationPos &&
+          !pickLookAt &&
+          !pickMarker &&
           placeLabels.map((p) => {
             const s = project(p.lng, p.lat);
             if (s.x < -40 || s.y < -20 || s.x > size.w + 40 || s.y > size.h + 20)
@@ -956,7 +960,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
             return (
               <div
                 key={`${p.name}-${p.lat}`}
-                className="pointer-events-none absolute z-[4] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white shadow"
+                className="pointer-events-none absolute z-[1] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded bg-black/45 px-1.5 py-0.5 text-[10px] font-medium text-white/90"
                 style={{ left: s.x, top: s.y - 4 }}
               >
                 {p.name}
@@ -964,7 +968,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
             );
           })}
 
-        {/* Station markers — full callout only for active НСУ */}
+        {/* Station markers — only icon/delete capture clicks; H-callout is visual */}
         {layers.station &&
           displayStations.map((s) => {
           const p = project(s.longitude, s.latitude);
@@ -976,70 +980,85 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
                 ? `${s.terrainElevationM.toFixed(0)} м`
                 : null;
           return (
-            <button
+            <div
               key={s.id}
-              type="button"
-              title={
-                isActive
-                  ? `${s.name} · активная НСУ`
-                  : `${s.name} · клик — сделать активной`
-              }
               className={
                 isActive
-                  ? "absolute z-[3] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
-                  : "absolute z-[2] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center opacity-55 hover:opacity-100"
+                  ? "pointer-events-none absolute z-[6] -translate-x-1/2 -translate-y-1/2"
+                  : "pointer-events-none absolute z-[5] -translate-x-1/2 -translate-y-1/2 opacity-70"
               }
               style={{ left: p.x, top: p.y }}
-              onClick={(ev) => {
-                if (pickStationPos || pickLookAt || pickMarker) return;
-                ev.stopPropagation();
-                setActiveStationId(s.id);
-              }}
-              onPointerDown={(ev) => {
-                if (pickStationPos || pickLookAt || pickMarker) return;
-                ev.stopPropagation();
-              }}
             >
-              <span
-                className={
-                  isActive
-                    ? "flex h-7 w-7 items-center justify-center rounded-lg border-2 border-white bg-amber-500 shadow-[0_0_16px_rgba(240,193,74,0.55)]"
-                    : "flex h-5 w-5 items-center justify-center rounded-md border border-white/60 bg-amber-700/80 shadow"
-                }
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <path
-                    d="M12 3v10M8 7l4-4 4 4M6 21h12M9 21v-4h6v4"
-                    stroke="#111"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </span>
-              {isActive ? (
-                <span className="ags-glass-bar max-w-[10rem] px-1.5 py-1 text-left text-[9px] leading-tight text-ags-fg">
-                  <span className="block font-semibold text-amber-300">
+              <div className="relative flex items-start gap-1">
+                <button
+                  type="button"
+                  title={
+                    isActive
+                      ? `${s.name} · активная НСУ`
+                      : `${s.name} · выбрать`
+                  }
+                  className={
+                    isActive
+                      ? "pointer-events-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 border-white bg-amber-500 shadow-[0_0_16px_rgba(240,193,74,0.55)]"
+                      : "pointer-events-auto flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-white/60 bg-amber-700/90 shadow"
+                  }
+                  onClick={(ev) => {
+                    if (pickStationPos || pickLookAt || pickMarker) return;
+                    ev.stopPropagation();
+                    setActiveStationId(s.id);
+                  }}
+                  onPointerDown={(ev) => {
+                    if (pickStationPos || pickLookAt || pickMarker) return;
+                    ev.stopPropagation();
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <path
+                      d="M12 3v10M8 7l4-4 4 4M6 21h12M9 21v-4h6v4"
+                      stroke="#111"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  title="Удалить НСУ с карты"
+                  className="pointer-events-auto flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/30 bg-black/70 text-[11px] leading-none text-red-300 hover:bg-red-700 hover:text-white"
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    void removeStation(s.id);
+                  }}
+                  onPointerDown={(ev) => ev.stopPropagation()}
+                >
+                  ×
+                </button>
+              </div>
+              {isActive && (
+                <div className="pointer-events-none mt-1 max-w-[9.5rem] translate-x-1 rounded border border-white/10 bg-black/70 px-1.5 py-1 text-left text-[9px] leading-tight text-ags-fg backdrop-blur-sm">
+                  <div className="font-semibold text-amber-300">
                     НСУ · {s.name || "станция"}
-                  </span>
-                  <span className="block font-mono text-[8px] text-ags-muted">
+                  </div>
+                  <div className="font-mono text-[8px] text-ags-muted">
                     {s.latitude.toFixed(5)}, {s.longitude.toFixed(5)}
-                  </span>
+                  </div>
                   {hLabel && (
-                    <span className="block font-mono text-[8px] text-ags-fg">
+                    <div className="font-mono text-[8px] text-ags-fg">
                       H: {hLabel}
                       {plannerMode && rangeKm > 0
-                        ? ` · R = ${rangeKm.toFixed(1)} км`
+                        ? ` · R ${rangeKm.toFixed(0)} км`
                         : ""}
-                    </span>
+                    </div>
                   )}
-                </span>
-              ) : (
-                <span className="rounded bg-black/55 px-1 py-0.5 text-[8px] text-white/80">
-                  {s.name}
-                </span>
+                </div>
               )}
-            </button>
+              {!isActive && (
+                <div className="pointer-events-none mt-0.5 max-w-[4.5rem] truncate rounded bg-black/55 px-1 py-0.5 text-[8px] text-white/85">
+                  {s.name}
+                </div>
+              )}
+            </div>
           );
         })}
 
@@ -1124,7 +1143,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           active &&
           layers.radius &&
           (showRangeRing || showRadiusPref) &&
-          [0.25, 0.5, 0.75, 1].map((frac) => {
+          [0.5, 1].map((frac) => {
             const dM = rangeKm * 1000 * frac;
             const p = destinationPoint(
               active.latitude,
@@ -1136,8 +1155,8 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
             return (
               <div
                 key={`rr-lbl-${frac}`}
-                className="pointer-events-none absolute z-[2] -translate-x-1/2 -translate-y-1/2 rounded bg-black/55 px-1 py-0.5 font-mono text-[9px] text-white/90"
-                style={{ left: s.x + 10, top: s.y - 8 }}
+                className="pointer-events-none absolute z-[1] -translate-x-1/2 -translate-y-1/2 rounded bg-black/50 px-1 py-0.5 font-mono text-[9px] text-white/80"
+                style={{ left: s.x + 12, top: s.y - 6 }}
               >
                 {(dM / 1000).toFixed(1)} км
               </div>

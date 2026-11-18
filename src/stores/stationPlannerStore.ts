@@ -13,6 +13,7 @@ import {
 } from "@/services/catalogs";
 import {
   calcAntennaCenterAmsl,
+  deleteStation,
   listStations,
   upsertStation,
 } from "@/services/stations";
@@ -128,6 +129,8 @@ interface PlannerState {
    * otherwise moves the active one. No tree selection required.
    */
   placeOrMoveNsu: (lat: number, lng: number) => Promise<Station>;
+  /** Remove station from map / DB (working НСУ). */
+  removeStation: (id: string) => Promise<void>;
   /** Apply saved aiming preset (point, AZ/EL, range, patches, mast). */
   applyAimingPreset: (p: {
     latitude: number;
@@ -376,6 +379,33 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
 
   moveActiveStation: async (lat, lng) => {
     await get().placeOrMoveNsu(lat, lng);
+  },
+
+  removeStation: async (id) => {
+    const { activeStationId, stations, lookAt } = get();
+    try {
+      await deleteStation(id);
+      await get().refresh();
+    } catch (e) {
+      set({ stations: stations.filter((s) => s.id !== id) });
+      eventBus.emit(
+        "warning",
+        "map",
+        e instanceof Error
+          ? `НСУ удалена локально: ${e.message}`
+          : "НСУ удалена локально (без записи в БД)",
+      );
+    }
+    const nextStations = get().stations;
+    if (activeStationId === id) {
+      const next = nextStations[0] ?? null;
+      set({
+        activeStationId: next?.id ?? null,
+        lookAt: next ? lookAt : null,
+      });
+      if (next) get().syncLookAtFromAzimuth();
+    }
+    eventBus.emit("info", "map", "НСУ удалена с карты");
   },
 
   placeOrMoveNsu: async (lat, lng) => {
