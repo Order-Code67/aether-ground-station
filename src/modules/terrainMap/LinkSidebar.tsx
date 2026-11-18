@@ -65,6 +65,8 @@ export function LinkSidebar({
   const clearMapMarkers = useStationPlannerStore((s) => s.clearMapMarkers);
   const stations = useStationPlannerStore((s) => s.stations);
   const activeStationId = useStationPlannerStore((s) => s.activeStationId);
+  const setActiveStationId = useStationPlannerStore((s) => s.setActiveStationId);
+  const removeStation = useStationPlannerStore((s) => s.removeStation);
   const lookAt = useStationPlannerStore((s) => s.lookAt);
   const st = stations.find((s) => s.id === activeStationId);
 
@@ -178,6 +180,49 @@ export function LinkSidebar({
               : "не задана"}
           </dd>
         </dl>
+        {stations.length > 0 && (
+          <ul className="max-h-36 space-y-1 overflow-auto">
+            {stations.map((s) => {
+              const active = s.id === activeStationId;
+              return (
+                <li
+                  key={s.id}
+                  className={
+                    active
+                      ? "flex items-center gap-1 rounded border border-ags-accent/40 bg-ags-elevated px-1.5 py-1"
+                      : "flex items-center gap-1 rounded bg-ags-elevated/60 px-1.5 py-1"
+                  }
+                >
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 truncate text-left font-mono text-[10px]"
+                    onClick={() => setActiveStationId(s.id)}
+                    title="Сделать активной"
+                  >
+                    <span className={active ? "text-amber-300" : "text-ags-fg"}>
+                      {active ? "● " : ""}
+                      {s.name}
+                    </span>
+                    <span className="mt-0.5 block text-[9px] text-ags-dim">
+                      {s.latitude.toFixed(4)}, {s.longitude.toFixed(4)}
+                      {s.terrainElevationM != null
+                        ? ` · H ${s.terrainElevationM.toFixed(0)} м`
+                        : ""}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-ags-danger hover:bg-red-500/20"
+                    title="Удалить НСУ с карты"
+                    onClick={() => void removeStation(s.id)}
+                  >
+                    Удал.
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
         {mapMarkers.length > 0 && (
           <ul className="max-h-28 space-y-1 overflow-auto">
             {mapMarkers.map((m) => (

@@ -8,7 +8,7 @@ export function HeightLegend() {
     { c: "#c03030", l: "> 300" },
   ];
   return (
-    <div className="ags-glass-panel pointer-events-none absolute left-3 top-14 z-10 w-[7.25rem] px-2.5 py-2.5 text-[10px]">
+    <div className="ags-glass-panel pointer-events-none absolute left-3 top-[3.75rem] z-[2] w-[6.75rem] px-2 py-2 text-[10px] opacity-90">
       <div className="mb-1.5 font-semibold uppercase tracking-wide text-ags-muted">
         Высота, м
       </div>
