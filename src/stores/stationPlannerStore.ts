@@ -425,9 +425,7 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
     // Prefer moving an existing station — never spawn a second «НСУ» beside «Станция 1».
     const existing =
       stations.find((s) => s.id === activeStationId) ??
-      (stations.length === 1 ? stations[0]! : null) ??
-      stations.find((s) => /нсу|station|станц/i.test(s.name)) ??
-      null;
+      (stations.length >= 1 ? stations[0]! : null);
 
     const commitLocal = (st: Station, isNew: boolean) => {
       const list = get().stations;

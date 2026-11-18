@@ -86,11 +86,18 @@ export const useTerrainMapStore = create<TerrainMapState>((set, get) => ({
   hydrated: false,
 
   setTab: (tab) => {
-    set({ tab, view3d: tab === "3d" ? true : tab === "map" ? false : get().view3d });
+    // 3D overlay only on the 3D tab — never trap profile/radio under view3d.
+    set({
+      tab,
+      view3d: tab === "3d",
+    });
     get().persist();
   },
   setView3d: (view3d) => {
-    set({ view3d, tab: view3d ? "3d" : "map" });
+    set({
+      view3d,
+      tab: view3d ? "3d" : get().tab === "3d" ? "map" : get().tab,
+    });
     get().persist();
   },
   setDemoMode: (demoMode) => {
@@ -119,9 +126,12 @@ export const useTerrainMapStore = create<TerrainMapState>((set, get) => ({
     get().persist();
   },
   setControlMode: (controlMode) => {
-    set({ controlMode });
     if (controlMode === "center") {
       useStationPlannerStore.getState().resetSimZero();
+      // One-shot center, then return to manual so sliders stay usable.
+      set({ controlMode: "manual" });
+    } else {
+      set({ controlMode });
     }
     get().persist();
   },

@@ -8,6 +8,7 @@ export function ElevationProfileChart({
   droneLabel = "Цель",
   stationAmsl,
   targetAmsl,
+  showFresnel = true,
   onHoverDistanceM,
 }: {
   profile: LinkProfileResult | null;
@@ -15,6 +16,7 @@ export function ElevationProfileChart({
   droneLabel?: string;
   stationAmsl?: number | null;
   targetAmsl?: number | null;
+  showFresnel?: boolean;
   onHoverDistanceM?: (m: number | null) => void;
 }) {
   const [hoverX, setHoverX] = useState<number | null>(null);
@@ -176,10 +178,12 @@ export function ElevationProfileChart({
             <span className="h-px w-4 border-t border-dashed border-[#9ec5ff]" />
             Линия видимости
           </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-4 rounded-sm bg-[#3d8bfd]/30" />
-            1-я зона Френеля
-          </span>
+          {showFresnel && (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-4 rounded-sm bg-[#3d8bfd]/30" />
+              1-я зона Френеля
+            </span>
+          )}
           <span className="font-mono text-ags-fg">
             {(profile.distanceM / 1000).toFixed(2)} км
             {profile.deltaHeightM != null
@@ -248,7 +252,7 @@ export function ElevationProfileChart({
           />
         ))}
 
-        {geom.fresnelPath && (
+        {showFresnel && geom.fresnelPath && (
           <path d={geom.fresnelPath} fill="url(#agsFresnelGrad)" />
         )}
         {geom.terrainFill && (

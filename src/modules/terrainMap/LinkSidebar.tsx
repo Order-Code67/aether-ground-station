@@ -349,34 +349,48 @@ export function LinkSidebar({
             </button>
           ))}
         </div>
-        <label className="block text-[11px] text-ags-muted">
-          PAN заданный ({ranges.azMin}…{ranges.azMax}°)
-          <input
-            type="range"
-            className="mt-1 w-full"
-            min={ranges.azMin}
-            max={ranges.azMax}
-            step={0.5}
-            value={az}
-            disabled={controlMode === "auto" || controlMode === "hold"}
-            onChange={(e) => setAz(Number(e.target.value))}
-          />
-          <span className="font-mono text-ags-fg">{az.toFixed(1)}°</span>
-        </label>
-        <label className="block text-[11px] text-ags-muted">
-          TILT заданный ({ranges.elMin}…{ranges.elMax}°)
-          <input
-            type="range"
-            className="mt-1 w-full"
-            min={ranges.elMin}
-            max={ranges.elMax}
-            step={0.5}
-            value={el}
-            disabled={controlMode === "auto" || controlMode === "hold"}
-            onChange={(e) => setEl(Number(e.target.value))}
-          />
-          <span className="font-mono text-ags-fg">{el.toFixed(1)}°</span>
-        </label>
+        <div className="space-y-2.5">
+          <label className="block text-[11px] text-ags-muted">
+            <span className="mb-1 flex items-center justify-between gap-2">
+              <span>
+                PAN ({ranges.azMin}…{ranges.azMax}°)
+              </span>
+              <span className="shrink-0 rounded bg-ags-elevated px-1.5 py-0.5 font-mono text-ags-fg">
+                {az.toFixed(1)}°
+              </span>
+            </span>
+            <input
+              type="range"
+              className="w-full"
+              min={ranges.azMin}
+              max={ranges.azMax}
+              step={0.5}
+              value={az}
+              disabled={controlMode === "auto" || controlMode === "hold"}
+              onChange={(e) => setAz(Number(e.target.value))}
+            />
+          </label>
+          <label className="block text-[11px] text-ags-muted">
+            <span className="mb-1 flex items-center justify-between gap-2">
+              <span>
+                TILT ({ranges.elMin}…{ranges.elMax}°)
+              </span>
+              <span className="shrink-0 rounded bg-ags-elevated px-1.5 py-0.5 font-mono text-ags-fg">
+                {el.toFixed(1)}°
+              </span>
+            </span>
+            <input
+              type="range"
+              className="w-full"
+              min={ranges.elMin}
+              max={ranges.elMax}
+              step={0.5}
+              value={el}
+              disabled={controlMode === "auto" || controlMode === "hold"}
+              onChange={(e) => setEl(Number(e.target.value))}
+            />
+          </label>
+        </div>
         <dl className="grid grid-cols-[7.5rem_1fr] gap-y-1 font-mono text-[11px]">
           <dt className="text-ags-dim">PAN факт</dt>
           <dd>{factAz == null ? "Нет данных" : `${factAz.toFixed(1)}°`}</dd>

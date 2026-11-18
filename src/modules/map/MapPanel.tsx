@@ -550,9 +550,42 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           { lat, lng: lon },
         );
         let signed = brg > 180 ? brg - 360 : brg;
-        const { azMin, azMax } = state.panTiltRanges;
+        const { azMin, azMax, elMin, elMax } = state.panTiltRanges;
         signed = Math.min(azMax, Math.max(azMin, signed));
         setSimAzimuthDeg(signed);
+        // Geometric EL from DEM so TILT matches the line of sight immediately.
+        void (async () => {
+          try {
+            const adapter = getTerrainAdapter();
+            const [stSample, tgtSample] = await Promise.all([
+              adapter.sample(st.latitude, st.longitude),
+              adapter.sample(lat, lon),
+            ]);
+            const terrainSt =
+              stSample && !stSample.missing ? stSample.elevationM : null;
+            const terrainTgt =
+              tgtSample && !tgtSample.missing ? tgtSample.elevationM : null;
+            const antenna = calcAntennaCenterAmsl(
+              terrainSt ?? st.terrainElevationM,
+              st.mastHeightM ?? 15,
+              st.antennaOffsetM,
+            );
+            if (antenna == null || terrainTgt == null) return;
+            const dist = haversineM(
+              { lat: st.latitude, lng: st.longitude },
+              { lat, lng: lon },
+            );
+            if (dist < 1) return;
+            const elDeg = (Math.atan2(terrainTgt - antenna, dist) * 180) / Math.PI;
+            useStationPlannerStore
+              .getState()
+              .setSimElevationDeg(
+                Math.min(elMax, Math.max(elMin, elDeg)),
+              );
+          } catch {
+            /* DEM optional */
+          }
+        })();
       }
       eventBus.emit("info", "map", "Цель / направление задано");
       return;
@@ -914,7 +947,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
               />
             );
           })}
-          {plannerMode && active && lookAt && (
+          {plannerMode && active && lookAt && layers.los && (
             <line
               x1={project(active.longitude, active.latitude).x}
               y1={project(active.longitude, active.latitude).y}
@@ -1113,7 +1146,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           </div>
         )}
 
-        {plannerMode && active && lookAt && (
+        {plannerMode && active && lookAt && layers.los && (
           <div
             className="pointer-events-none absolute z-[4] -translate-x-1/2 -translate-y-1/2"
             style={{
@@ -1270,7 +1303,14 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
 
         {(() => {
           const d = droneEff();
-          if (!layers.drone || d.source === "none" || size.w <= 0) return null;
+          // lookAt already drawn as «Цель B» + amber LOS — skip duplicate.
+          if (
+            !layers.drone ||
+            d.source === "none" ||
+            d.source === "lookAt" ||
+            size.w <= 0
+          )
+            return null;
           const p = project(d.lng, d.lat);
           const a = active
             ? project(active.longitude, active.latitude)
@@ -1297,11 +1337,9 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
                 title={
                   d.source === "live"
                     ? "Дрон (телеметрия)"
-                    : d.source === "lookAt"
-                      ? "Цель / направление"
-                      : d.source === "demo"
-                        ? "DEMO дрон"
-                        : "Цель"
+                    : d.source === "demo"
+                      ? "DEMO дрон"
+                      : "Цель"
                 }
               >
                 {d.source === "live"

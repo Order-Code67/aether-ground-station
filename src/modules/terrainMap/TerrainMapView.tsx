@@ -11,6 +11,7 @@ import {
   computeLinkProfile,
   type LinkProfileResult,
 } from "@/services/terrain/linkProfile";
+import { radioVisibilityLabel } from "@/services/terrain/fresnel";
 import { HeightLegend } from "./HeightLegend";
 import { LinkSidebar } from "./LinkSidebar";
 import { ElevationProfileChart } from "./ElevationProfileChart";
@@ -81,10 +82,15 @@ export function TerrainMapView() {
     if (!demoMode) syncLookAtFromAzimuth();
   }, [demoMode, simAz, rangeKm, activeStationId, syncLookAtFromAzimuth]);
 
-  // Keep elevation profile visible whenever there is a station → target line.
+  // Keep elevation profile visible whenever there is a station → target line
+  // or the user opens dedicated Profile / Radio tabs.
   useEffect(() => {
     if (st && lookAt) setBottomOpen(true);
-  }, [st?.id, lookAt?.lat, lookAt?.lng, setBottomOpen]);
+    if (tab === "profile" || tab === "radio") {
+      setBottomOpen(true);
+      setProfileH((h) => Math.max(h, 260));
+    }
+  }, [st?.id, lookAt?.lat, lookAt?.lng, tab, setBottomOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -288,25 +294,28 @@ export function TerrainMapView() {
             !view3d && (
               <>
                 <MapPanel plannerMode />
-                {(showHeightLegend || layers.demColormap) && <HeightLegend />}
+                {(showHeightLegend || layers.demColormap) && (
+                  <HeightLegend placement={leftOpen ? "right" : "left"} />
+                )}
                 <CursorHud />
               </>
             )}
           {(tab === "3d" || view3d) && tab !== "antennas" && (
             <div className="absolute inset-0 z-[1] flex min-h-0 flex-col bg-ags-bg">
               <TerrainMesh3D className="h-full min-h-0 w-full flex-1" />
-              {(showHeightLegend || layers.demColormap) && <HeightLegend />}
-              <div className="ags-glass-bar pointer-events-none absolute bottom-3 left-3 z-10 max-w-sm px-2 py-1 text-[10px] text-ags-muted">
-                Офлайн Terrarium · вертикальный масштаб — преувеличение (см.
-                слои)
-                {st ? ` · ${st.name}` : " · центр Смоленск"}
+              {(showHeightLegend || layers.demColormap) && (
+                <HeightLegend placement="bottom-left" />
+              )}
+              <div className="ags-glass-bar pointer-events-none absolute bottom-3 right-3 z-10 max-w-xs px-2 py-1 text-[10px] text-ags-muted">
+                3D · Terrarium · Z× в слоях
+                {st ? ` · ${st.name}` : " · Смоленск"}
               </div>
             </div>
           )}
           {tab === "telemetry" && (
-            <div className="flex h-full flex-col items-start justify-center gap-2 p-6 text-sm text-ags-muted">
-              <p>
-                Телеметрия дрона — модуль «Телеметрия» / COM JSON. Цель на карте:{" "}
+            <div className="flex h-full flex-col items-start justify-center gap-3 p-6 text-sm text-ags-muted">
+              <p className="text-ags-fg">
+                Источник цели:{" "}
                 {drone.source === "live"
                   ? "LIVE позиция"
                   : drone.source === "lookAt"
@@ -315,12 +324,40 @@ export function TerrainMapView() {
                       ? "DEMO дрон"
                       : "Нет данных позиции"}
               </p>
-              {drone.source === "live" && (
-                <p className="font-mono text-xs text-ags-fg">
-                  {drone.lat.toFixed(5)}, {drone.lng.toFixed(5)}
-                  {drone.amslM != null ? ` · ${drone.amslM.toFixed(0)} м AMSL` : ""}
-                </p>
+              {drone.source !== "none" && (
+                <dl className="grid grid-cols-[7rem_1fr] gap-y-1 font-mono text-xs text-ags-fg">
+                  <dt className="text-ags-dim">Координаты</dt>
+                  <dd>
+                    {drone.lat.toFixed(5)}, {drone.lng.toFixed(5)}
+                  </dd>
+                  <dt className="text-ags-dim">Высота</dt>
+                  <dd>
+                    {drone.amslM != null
+                      ? `${drone.amslM.toFixed(0)} м AMSL`
+                      : drone.aglM != null
+                        ? `${drone.aglM.toFixed(0)} м AGL`
+                        : "Н/Д"}
+                  </dd>
+                  {profile && (
+                    <>
+                      <dt className="text-ags-dim">Дальность</dt>
+                      <dd>{(profile.distanceM / 1000).toFixed(2)} км</dd>
+                      <dt className="text-ags-dim">Угол места</dt>
+                      <dd>
+                        {profile.elevationDeg != null
+                          ? `${profile.elevationDeg.toFixed(2)}°`
+                          : "Н/Д"}
+                      </dd>
+                      <dt className="text-ags-dim">Радиовидимость</dt>
+                      <dd>{radioVisibilityLabel(profile.status)}</dd>
+                    </>
+                  )}
+                </dl>
               )}
+              <p className="max-w-md text-[11px] text-ags-dim">
+                LIVE поток — модуль «Телеметрия» / COM JSON. Без потока цель берётся
+                из точки B или DEMO.
+              </p>
             </div>
           )}
           {tab === "radio" && (
@@ -376,6 +413,7 @@ export function TerrainMapView() {
             profile={profile}
             stationAmsl={stationAmsl}
             targetAmsl={droneAmsl}
+            showFresnel={layers.fresnel !== false}
             stationLabel={profileA ? "A" : "НСУ"}
             droneLabel={
               profileB
@@ -388,6 +426,20 @@ export function TerrainMapView() {
                       ? "DEMO"
                       : "Цель"
             }
+            onHoverDistanceM={(d) => {
+              if (d == null || !profile?.points.length) return;
+              const pt = profile.points.reduce((best, p) =>
+                Math.abs(p.distanceM - d) < Math.abs(best.distanceM - d)
+                  ? p
+                  : best,
+              );
+              useGisStore.getState().setCursor({
+                lat: pt.lat,
+                lng: pt.lng,
+                elevM: pt.terrainM,
+                source: "профиль",
+              });
+            }}
           />
         </div>
       )}
