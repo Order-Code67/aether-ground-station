@@ -521,10 +521,11 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
             next[i] = st;
             return next;
           });
+          useGisStore.getState().setBottomPanelOpen(true);
           eventBus.emit(
             "info",
             "map",
-            `НСУ: ${st.latitude.toFixed(5)}, ${st.longitude.toFixed(5)}`,
+            `НСУ установлена: ${st.latitude.toFixed(5)}, ${st.longitude.toFixed(5)}`,
           );
         })
         .catch((err) => {
@@ -963,7 +964,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
             );
           })}
 
-        {/* Station markers — professional callouts */}
+        {/* Station markers — full callout only for active НСУ */}
         {layers.station &&
           displayStations.map((s) => {
           const p = project(s.longitude, s.latitude);
@@ -978,8 +979,16 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
             <button
               key={s.id}
               type="button"
-              title={`${s.name} · клик — выбрать`}
-              className="absolute z-[3] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
+              title={
+                isActive
+                  ? `${s.name} · активная НСУ`
+                  : `${s.name} · клик — сделать активной`
+              }
+              className={
+                isActive
+                  ? "absolute z-[3] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1"
+                  : "absolute z-[2] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center opacity-55 hover:opacity-100"
+              }
               style={{ left: p.x, top: p.y }}
               onClick={(ev) => {
                 if (pickStationPos || pickLookAt || pickMarker) return;
@@ -995,7 +1004,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
                 className={
                   isActive
                     ? "flex h-7 w-7 items-center justify-center rounded-lg border-2 border-white bg-amber-500 shadow-[0_0_16px_rgba(240,193,74,0.55)]"
-                    : "flex h-6 w-6 items-center justify-center rounded-lg border border-white/70 bg-amber-600/90 shadow"
+                    : "flex h-5 w-5 items-center justify-center rounded-md border border-white/60 bg-amber-700/80 shadow"
                 }
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -1008,19 +1017,28 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
                   />
                 </svg>
               </span>
-              <span className="ags-glass-bar max-w-[9rem] px-1.5 py-1 text-left text-[9px] leading-tight text-ags-fg">
-                <span className="block font-semibold text-amber-300">
-                  {s.name || "НСУ"}
-                </span>
-                <span className="block font-mono text-[8px] text-ags-muted">
-                  {s.latitude.toFixed(5)}, {s.longitude.toFixed(5)}
-                </span>
-                {hLabel && (
-                  <span className="block font-mono text-[8px] text-ags-fg">
-                    H: {hLabel}
+              {isActive ? (
+                <span className="ags-glass-bar max-w-[10rem] px-1.5 py-1 text-left text-[9px] leading-tight text-ags-fg">
+                  <span className="block font-semibold text-amber-300">
+                    НСУ · {s.name || "станция"}
                   </span>
-                )}
-              </span>
+                  <span className="block font-mono text-[8px] text-ags-muted">
+                    {s.latitude.toFixed(5)}, {s.longitude.toFixed(5)}
+                  </span>
+                  {hLabel && (
+                    <span className="block font-mono text-[8px] text-ags-fg">
+                      H: {hLabel}
+                      {plannerMode && rangeKm > 0
+                        ? ` · R = ${rangeKm.toFixed(1)} км`
+                        : ""}
+                    </span>
+                  )}
+                </span>
+              ) : (
+                <span className="rounded bg-black/55 px-1 py-0.5 text-[8px] text-white/80">
+                  {s.name}
+                </span>
+              )}
             </button>
           );
         })}
