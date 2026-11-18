@@ -81,6 +81,11 @@ export function TerrainMapView() {
     if (!demoMode) syncLookAtFromAzimuth();
   }, [demoMode, simAz, rangeKm, activeStationId, syncLookAtFromAzimuth]);
 
+  // Keep elevation profile visible whenever there is a station → target line.
+  useEffect(() => {
+    if (st && lookAt) setBottomOpen(true);
+  }, [st?.id, lookAt?.lat, lookAt?.lng, setBottomOpen]);
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
