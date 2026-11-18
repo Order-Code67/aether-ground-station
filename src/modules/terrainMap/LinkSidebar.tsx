@@ -53,6 +53,19 @@ export function LinkSidebar({
   );
   const factAz = useStationPlannerStore((s) => s.factAzimuthDeg);
   const factEl = useStationPlannerStore((s) => s.factElevationDeg);
+  const pickStationPos = useStationPlannerStore((s) => s.pickStationPos);
+  const pickLookAt = useStationPlannerStore((s) => s.pickLookAt);
+  const pickMarker = useStationPlannerStore((s) => s.pickMarker);
+  const setPickStationPos = useStationPlannerStore((s) => s.setPickStationPos);
+  const setPickLookAt = useStationPlannerStore((s) => s.setPickLookAt);
+  const setPickMarker = useStationPlannerStore((s) => s.setPickMarker);
+  const mapMarkers = useStationPlannerStore((s) => s.mapMarkers);
+  const removeMapMarker = useStationPlannerStore((s) => s.removeMapMarker);
+  const clearMapMarkers = useStationPlannerStore((s) => s.clearMapMarkers);
+  const stations = useStationPlannerStore((s) => s.stations);
+  const activeStationId = useStationPlannerStore((s) => s.activeStationId);
+  const lookAt = useStationPlannerStore((s) => s.lookAt);
+  const st = stations.find((s) => s.id === activeStationId);
 
   const controlMode = useTerrainMapStore((s) => s.controlMode);
   const setControlMode = useTerrainMapStore((s) => s.setControlMode);
@@ -93,8 +106,121 @@ export function LinkSidebar({
     setEl,
   ]);
 
+  const pickBtn = (on: boolean) =>
+    on
+      ? "rounded bg-ags-accent px-2 py-1 text-[10px] text-white"
+      : "rounded border border-ags-border px-2 py-1 text-[10px]";
+
   return (
     <aside className="flex h-full min-h-0 w-72 shrink-0 flex-col gap-2 overflow-auto border-l border-ags-border-subtle bg-ags-panel/95 p-3 text-xs backdrop-blur-md">
+      <section className="space-y-2 rounded border border-ags-border/60 p-2">
+        <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ags-muted">
+          Точки на карте
+        </h3>
+        <div className="flex flex-wrap gap-1">
+          <button
+            type="button"
+            className={pickBtn(pickStationPos)}
+            onClick={() => setPickStationPos(!pickStationPos)}
+          >
+            {pickStationPos ? "Клик: НСУ…" : "Поставить НСУ"}
+          </button>
+          <button
+            type="button"
+            className={pickBtn(pickLookAt)}
+            onClick={() => setPickLookAt(!pickLookAt)}
+          >
+            {pickLookAt ? "Клик: цель…" : "Поставить цель B"}
+          </button>
+          <button
+            type="button"
+            className={pickBtn(pickMarker)}
+            onClick={() => setPickMarker(!pickMarker)}
+          >
+            {pickMarker ? "Клик: точка…" : "Своя точка"}
+          </button>
+        </div>
+        <dl className="grid grid-cols-[4.5rem_1fr] gap-y-1 font-mono text-[10px]">
+          <dt className="text-ags-dim">НСУ</dt>
+          <dd>
+            {st
+              ? `${st.latitude.toFixed(5)}, ${st.longitude.toFixed(5)}`
+              : "не задана — клик по карте"}
+          </dd>
+          <dt className="text-ags-dim">Цель B</dt>
+          <dd>
+            {lookAt
+              ? `${lookAt.lat.toFixed(5)}, ${lookAt.lng.toFixed(5)}`
+              : "не задана"}
+          </dd>
+        </dl>
+        {mapMarkers.length > 0 && (
+          <ul className="max-h-28 space-y-1 overflow-auto">
+            {mapMarkers.map((m) => (
+              <li
+                key={m.id}
+                className="flex items-center justify-between gap-1 rounded bg-ags-elevated/80 px-1.5 py-0.5"
+              >
+                <span className="truncate font-mono text-[10px]">
+                  {m.label}: {m.lat.toFixed(4)}, {m.lng.toFixed(4)}
+                </span>
+                <button
+                  type="button"
+                  className="shrink-0 text-[10px] text-ags-warning"
+                  onClick={() => removeMapMarker(m.id)}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {mapMarkers.length > 0 && (
+          <button
+            type="button"
+            className="text-[10px] text-ags-dim underline"
+            onClick={() => clearMapMarkers()}
+          >
+            Очистить точки
+          </button>
+        )}
+        <p className="text-[10px] text-ags-dim">
+          Режим постановки: кнопка → клик по карте. Станцию из дерева выбирать не
+          нужно.
+        </p>
+      </section>
+
+      <section className="space-y-1.5 rounded border border-ags-warning/30 bg-ags-elevated/40 p-2">
+        <p className="text-[9px] leading-snug text-ags-dim">
+          Радиовидимость по DEM/Френелю — геометрия, не качество канала. Помехи,
+          многолучевость и объекты вне DEM не учитываются.
+        </p>
+      </section>
+
+      {st && (
+        <section className="space-y-1 rounded border border-ags-border/60 p-2">
+          <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ags-muted">
+            Станция (НСУ)
+          </h3>
+          <dl className="grid grid-cols-[7.5rem_1fr] gap-y-1 font-mono text-[11px]">
+            <dt className="text-ags-dim">Координаты</dt>
+            <dd>
+              {st.latitude.toFixed(5)}, {st.longitude.toFixed(5)}
+            </dd>
+            <dt className="text-ags-dim">Рельеф</dt>
+            <dd>
+              {st.terrainElevationM == null
+                ? "Н/Д"
+                : `${st.terrainElevationM.toFixed(0)} м`}
+            </dd>
+            <dt className="text-ags-dim">Мачта (над землёй)</dt>
+            <dd>{st.mastHeightM ?? 15} м</dd>
+            <dt className="text-ags-dim">Антенна AMSL</dt>
+            <dd>{nd(stationAmsl, 0, " м")}</dd>
+          </dl>
+        </section>
+      )}
+
       <section className="space-y-1.5 rounded border border-ags-border/60 p-2">
         <h3 className="text-[10px] font-semibold uppercase tracking-wide text-ags-muted">
           Параметры связи

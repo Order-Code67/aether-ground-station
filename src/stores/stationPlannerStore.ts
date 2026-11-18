@@ -28,8 +28,19 @@ export interface LookAtPoint {
   lng: number;
 }
 
+export interface MapUserPoint {
+  id: string;
+  lat: number;
+  lng: number;
+  label: string;
+}
+
 /** Default look-at distance along azimuth when B not picked (m). */
 export const DEFAULT_LOOK_AT_M = 2500;
+
+function nid(prefix: string) {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`;
+}
 
 interface PlannerState {
   complexes: Complex[];
@@ -61,8 +72,12 @@ interface PlannerState {
   videoPatchDeg: number;
   /** Horizontal beamwidth of control/RC patch (°) — map sector. */
   controlPatchDeg: number;
-  /** When true, next map click moves active station point A. */
+  /** When true, next map click moves / creates НСУ (point A). */
   pickStationPos: boolean;
+  /** When true, next map click adds a free user point. */
+  pickMarker: boolean;
+  /** Free operator points on the map (not НСУ / not цель B). */
+  mapMarkers: MapUserPoint[];
   /** Show DEM flight-corridor clearance along heading. */
   showFlightCorridor: boolean;
   treeCollapsed: boolean;
@@ -94,11 +109,20 @@ interface PlannerState {
   setVideoPatchDeg: (deg: number) => void;
   setControlPatchDeg: (deg: number) => void;
   setPickStationPos: (v: boolean) => void;
+  setPickMarker: (v: boolean) => void;
+  addMapMarker: (lat: number, lng: number, label?: string) => void;
+  removeMapMarker: (id: string) => void;
+  clearMapMarkers: () => void;
   setShowFlightCorridor: (v: boolean) => void;
   /** Manual mast height (m) — persists on active station, updates AMSL / corridor. */
   setMastHeightM: (m: number) => Promise<void>;
   /** Move active station to lat/lng (working point). */
   moveActiveStation: (lat: number, lng: number) => Promise<void>;
+  /**
+   * Place НСУ at lat/lng: creates a working station if none selected,
+   * otherwise moves the active one. No tree selection required.
+   */
+  placeOrMoveNsu: (lat: number, lng: number) => Promise<Station>;
   /** Apply saved aiming preset (point, AZ/EL, range, patches, mast). */
   applyAimingPreset: (p: {
     latitude: number;
@@ -150,6 +174,8 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
   videoPatchDeg: 60,
   controlPatchDeg: 90,
   pickStationPos: false,
+  pickMarker: false,
+  mapMarkers: [],
   showFlightCorridor: true,
   treeCollapsed: false,
   cardCollapsed: false,
@@ -272,7 +298,11 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
   setLookAt: (p) => set({ lookAt: p, pickLookAt: false }),
 
   setPickLookAt: (v) =>
-    set({ pickLookAt: v, pickStationPos: v ? false : get().pickStationPos }),
+    set({
+      pickLookAt: v,
+      pickStationPos: v ? false : get().pickStationPos,
+      pickMarker: v ? false : get().pickMarker,
+    }),
 
   setRangeKm: (km) =>
     set({ rangeKm: Math.min(300, Math.max(1, Number.isFinite(km) ? km : 40)) }),
@@ -295,7 +325,39 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
     }),
 
   setPickStationPos: (v) =>
-    set({ pickStationPos: v, pickLookAt: v ? false : get().pickLookAt }),
+    set({
+      pickStationPos: v,
+      pickLookAt: v ? false : get().pickLookAt,
+      pickMarker: v ? false : get().pickMarker,
+    }),
+
+  setPickMarker: (v) =>
+    set({
+      pickMarker: v,
+      pickLookAt: v ? false : get().pickLookAt,
+      pickStationPos: v ? false : get().pickStationPos,
+    }),
+
+  addMapMarker: (lat, lng, label) => {
+    const n = get().mapMarkers.length + 1;
+    set({
+      mapMarkers: [
+        ...get().mapMarkers,
+        {
+          id: nid("pt"),
+          lat,
+          lng,
+          label: label?.trim() || `Точка ${n}`,
+        },
+      ],
+      pickMarker: false,
+    });
+  },
+
+  removeMapMarker: (id) =>
+    set({ mapMarkers: get().mapMarkers.filter((m) => m.id !== id) }),
+
+  clearMapMarkers: () => set({ mapMarkers: [] }),
 
   setShowFlightCorridor: (v) => set({ showFlightCorridor: v }),
 
@@ -308,11 +370,65 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
   },
 
   moveActiveStation: async (lat, lng) => {
-    const { activeStationId, stations } = get();
-    const st = stations.find((s) => s.id === activeStationId);
-    if (!st) return;
-    await get().saveStation({ ...st, latitude: lat, longitude: lng });
-    get().syncLookAtFromAzimuth();
+    await get().placeOrMoveNsu(lat, lng);
+  },
+
+  placeOrMoveNsu: async (lat, lng) => {
+    const { activeStationId, stations, activeComplexId, activeSiteId } = get();
+    let elev: number | null = null;
+    try {
+      const { getTerrainAdapter, registerBundledTerrariumDem } = await import(
+        "@/services/terrain/terrainEngine"
+      );
+      await registerBundledTerrariumDem();
+      const s = await getTerrainAdapter().sample(lat, lng);
+      if (!s.missing && s.elevationM != null) elev = s.elevationM;
+    } catch {
+      /* DEM optional */
+    }
+
+    const existing = stations.find((s) => s.id === activeStationId);
+    if (existing) {
+      const next = {
+        ...existing,
+        latitude: lat,
+        longitude: lng,
+        terrainElevationM: elev ?? existing.terrainElevationM ?? null,
+      };
+      await get().saveStation(next);
+      set({ pickStationPos: false });
+      get().syncLookAtFromAzimuth();
+      return next;
+    }
+
+    const st: Station = {
+      id: nid("stn"),
+      complexId: activeComplexId,
+      siteId: activeSiteId,
+      name: "НСУ",
+      status: "active",
+      latitude: lat,
+      longitude: lng,
+      terrainElevationM: elev,
+      mastHeightM: 15,
+      antennaOffsetM: 0,
+      antennaCenterAmslM: null,
+      payload: "{}",
+      updatedAt: new Date().toISOString(),
+    };
+    await get().saveStation(st);
+    const b = destinationPoint(
+      lat,
+      lng,
+      get().simAzimuthDeg,
+      DEFAULT_LOOK_AT_M,
+    );
+    set({
+      activeStationId: st.id,
+      pickStationPos: false,
+      lookAt: b,
+    });
+    return st;
   },
 
   applyAimingPreset: async (p) => {

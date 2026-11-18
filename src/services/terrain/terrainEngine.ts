@@ -194,23 +194,39 @@ export function createGeoTiffAdapter(path: string): TerrainAdapter {
 
 type TilePixels = { w: number; h: number; data: Uint8ClampedArray };
 
+/** Absolute same-origin URL (required for Tauri asset / custom protocol). */
+function absoluteAssetUrl(pathOrTemplate: string): string {
+  const raw = pathOrTemplate.trim();
+  if (!raw) return raw;
+  if (/^https?:\/\//i.test(raw) || raw.startsWith("blob:")) return raw;
+  const origin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "";
+  const path = raw.startsWith("/") ? raw : `/${raw}`;
+  return `${origin}${path}`;
+}
+
 /**
- * Offline Terrarium PNG tiles (Mapzen encoding) — used for MapLibre 3D
- * and elevation sampling without Rust GeoTIFF.
+ * Offline Terrarium PNG tiles (Mapzen encoding) for elevation sampling.
  */
 export function createTerrariumTileAdapter(opts?: {
   template?: string;
   zoom?: number;
   label?: string;
 }): TerrainAdapter {
-  const template = opts?.template ?? BUNDLED_DEM_TILES;
+  const template = absoluteAssetUrl(opts?.template ?? BUNDLED_DEM_TILES);
   const zoom = Math.min(
     BUNDLED_DEM_MAX_ZOOM,
     Math.max(BUNDLED_DEM_MIN_ZOOM, opts?.zoom ?? 10),
   );
   const cache = new Map<string, Promise<TilePixels | null>>();
 
-  async function loadTile(z: number, x: number, y: number): Promise<TilePixels | null> {
+  async function loadTile(
+    z: number,
+    x: number,
+    y: number,
+  ): Promise<TilePixels | null> {
     const key = `${z}/${x}/${y}`;
     let pending = cache.get(key);
     if (!pending) {
@@ -268,15 +284,20 @@ export function createTerrariumTileAdapter(opts?: {
           missing: true,
         };
       }
-      const px = Math.min(tile.w - 1, Math.max(0, Math.floor((x - tx) * tile.w)));
-      const py = Math.min(tile.h - 1, Math.max(0, Math.floor((y - ty) * tile.h)));
+      const px = Math.min(
+        tile.w - 1,
+        Math.max(0, Math.floor((x - tx) * tile.w)),
+      );
+      const py = Math.min(
+        tile.h - 1,
+        Math.max(0, Math.floor((y - ty) * tile.h)),
+      );
       const i = (py * tile.w + px) * 4;
       const elevationM = decodeTerrariumRgb(
         tile.data[i]!,
         tile.data[i + 1]!,
         tile.data[i + 2]!,
       );
-      // Void / ocean sentinel in some tiles
       if (!Number.isFinite(elevationM) || elevationM < -500) {
         return {
           latitude: lat,
@@ -299,29 +320,27 @@ export function createTerrariumTileAdapter(opts?: {
 
 /** Probe bundled DEM and register Terrarium adapter when tiles exist. */
 export async function registerBundledTerrariumDem(): Promise<boolean> {
+  const probeUrl = absoluteAssetUrl(
+    BUNDLED_DEM_TILES.replace("{z}", "8")
+      .replace("{x}", "154")
+      .replace("{y}", "79"),
+  );
   try {
-    const probe = await fetch(
-      BUNDLED_DEM_TILES.replace("{z}", "8")
-        .replace("{x}", "154")
-        .replace("{y}", "79"),
-      { method: "HEAD" },
-    );
-    // Some hosts ignore HEAD — fall back to GET of manifest
+    const probe = await fetch(probeUrl);
     if (!probe.ok) {
-      const man = await fetch("/dem-tiles/manifest.json");
+      const man = await fetch(absoluteAssetUrl("/dem-tiles/manifest.json"));
       if (!man.ok) return false;
     }
   } catch {
     try {
-      const man = await fetch("/dem-tiles/manifest.json");
+      const man = await fetch(absoluteAssetUrl("/dem-tiles/manifest.json"));
       if (!man.ok) return false;
     } catch {
       return false;
     }
   }
   if (active.id !== "none" && active.id !== "terrarium") {
-    // Keep operator-loaded GeoTIFF / manual
-    return false;
+    return true; // already have a DEM
   }
   setTerrainAdapter(createTerrariumTileAdapter({ zoom: 10 }), {
     id: "bundled-terrarium",

@@ -18,9 +18,10 @@ import {
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
 } from "./mapStyles";
-import { HillshadeTile } from "./HillshadeTile";
+import { DemOverlayTile } from "./DemOverlayTile";
 import { placesVisibleAtZoom } from "./places";
 import { SafeTile } from "./SafeTile";
+import { useGisStore } from "@/stores/gisStore";
 import {
   destinationByAzimuth,
   lonLatToWorldPx,
@@ -41,13 +42,6 @@ import { getTerrainAdapter } from "@/services/terrain/terrainEngine";
 import { destinationPoint } from "@/utils/geo";
 import { calcAntennaCenterAmsl } from "@/services/stations";
 import { useTerrainMapStore } from "@/stores/terrainMapStore";
-
-interface UserMarker {
-  id: string;
-  lng: number;
-  lat: number;
-  label: string;
-}
 
 type TileMode = "osm" | "offline" | "local";
 
@@ -90,7 +84,6 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     "pending",
   );
 
-  const [markers, setMarkers] = useState<UserMarker[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
   const canManage = useAuthStore((s) => s.can("manageDevices"));
   const setActiveStationId = useStationPlannerStore((s) => s.setActiveStationId);
@@ -100,9 +93,15 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const lookAt = useStationPlannerStore((s) => s.lookAt);
   const pickLookAt = useStationPlannerStore((s) => s.pickLookAt);
   const pickStationPos = useStationPlannerStore((s) => s.pickStationPos);
+  const pickMarker = useStationPlannerStore((s) => s.pickMarker);
+  const mapMarkers = useStationPlannerStore((s) => s.mapMarkers);
   const setLookAt = useStationPlannerStore((s) => s.setLookAt);
   const setPickStationPos = useStationPlannerStore((s) => s.setPickStationPos);
-  const moveActiveStation = useStationPlannerStore((s) => s.moveActiveStation);
+  const setPickLookAt = useStationPlannerStore((s) => s.setPickLookAt);
+  const setPickMarker = useStationPlannerStore((s) => s.setPickMarker);
+  const placeOrMoveNsu = useStationPlannerStore((s) => s.placeOrMoveNsu);
+  const addMapMarker = useStationPlannerStore((s) => s.addMapMarker);
+  const removeMapMarker = useStationPlannerStore((s) => s.removeMapMarker);
   const setSimAzimuthDeg = useStationPlannerStore((s) => s.setSimAzimuthDeg);
   const plannerStations = useStationPlannerStore((s) => s.stations);
   const rangeKm = useStationPlannerStore((s) => s.rangeKm);
@@ -130,8 +129,19 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const [distanceM, setDistanceM] = useState<number | null>(null);
   const [tileMode, setTileMode] = useState<TileMode>("offline");
   const [localUrl, setLocalUrl] = useState(BUNDLED_OFFLINE_TILES);
-  /** Relief hillshade from Terrarium DEM — on by default. */
-  const [reliefOn, setReliefOn] = useState(true);
+  const layers = useGisStore((s) => s.layers);
+  const setCursor = useGisStore((s) => s.setCursor);
+  const gisTool = useGisStore((s) => s.tool);
+  const pushMeasurePoint = useGisStore((s) => s.pushMeasurePoint);
+  const addRoutePoint = useGisStore((s) => s.addRoutePoint);
+  const addObstacle = useGisStore((s) => s.addObstacle);
+  const setProfileOverrideA = useGisStore((s) => s.setProfileOverrideA);
+  const setProfileOverrideB = useGisStore((s) => s.setProfileOverrideB);
+  const setGisTool = useGisStore((s) => s.setTool);
+  const routes = useGisStore((s) => s.routes);
+  const obstacles = useGisStore((s) => s.obstacles);
+  const measureDraft = useGisStore((s) => s.measureDraft);
+  const verticalExaggeration = useGisStore((s) => s.verticalExaggeration);
 
   const measureModeRef = useRef(measureMode);
   measureModeRef.current = measureMode;
@@ -139,6 +149,8 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   pickLookAtRef.current = pickLookAt;
   const pickStationPosRef = useRef(pickStationPos);
   pickStationPosRef.current = pickStationPos;
+  const pickMarkerRef = useRef(pickMarker);
+  pickMarkerRef.current = pickMarker;
 
   const zMax = tileMode === "osm" ? MAX_Z_OSM : MAX_Z_OFFLINE;
   const tileTpl = templateFor(tileMode, localUrl);
@@ -359,8 +371,11 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const placeLabels = useMemo(() => placesVisibleAtZoom(zoom), [zoom]);
 
   /** DEM tiles for hillshade (clamp to bundled Terrarium zooms). */
+  const demOverlayNeeded =
+    layers.relief || layers.demColormap || layers.contours;
+
   const demTiles = useMemo(() => {
-    if (!reliefOn || size.w <= 0 || size.h <= 0) return [];
+    if (!demOverlayNeeded || size.w <= 0 || size.h <= 0) return [];
     const demZ = Math.min(
       BUNDLED_DEM_MAX_ZOOM,
       Math.max(BUNDLED_DEM_MIN_ZOOM, zoom),
@@ -406,7 +421,37 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
       }
     }
     return out;
-  }, [center.lat, center.lon, reliefOn, size.h, size.w, zoom]);
+  }, [center.lat, center.lon, demOverlayNeeded, size.h, size.w, zoom]);
+
+  const cursorSampleRef = useRef(0);
+  const onHostPointerMove = (e: React.PointerEvent) => {
+    onPointerMove(e);
+    const now = performance.now();
+    if (now - cursorSampleRef.current < 80) return;
+    cursorSampleRef.current = now;
+    const rect = hostRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const { lon, lat } = unproject(e.clientX - rect.left, e.clientY - rect.top);
+    void (async () => {
+      try {
+        const { getTerrainAdapter, getDemMeta, registerBundledTerrariumDem } =
+          await import("@/services/terrain/terrainEngine");
+        await registerBundledTerrariumDem();
+        const s = await getTerrainAdapter().sample(lat, lon);
+        const meta = getDemMeta();
+        setCursor({
+          lat,
+          lng: lon,
+          elevM: s.missing ? null : s.elevationM,
+          source: s.missing
+            ? null
+            : `${meta.name}${meta.resolutionM != null ? ` · ≈${meta.resolutionM} м` : ""}`,
+        });
+      } catch {
+        setCursor({ lat, lng: lon, elevM: null, source: null });
+      }
+    })();
+  };
 
   const movedRef = useRef(false);
 
@@ -464,10 +509,50 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     const sy = e.clientY - rect.top;
     const { lon, lat } = unproject(sx, sy);
 
+    const tool = useGisStore.getState().tool;
+    if (tool === "measureDistance" || tool === "measureArea" || tool === "measureAzimuth" || tool === "measureDeltaH") {
+      void pushMeasurePoint(lat, lon).then((r) => {
+        if (r === "done") eventBus.emit("info", "map", "Измерение сохранено");
+      });
+      return;
+    }
+    if (tool === "routeEdit") {
+      addRoutePoint(lat, lon);
+      eventBus.emit("info", "map", "Точка маршрута");
+      return;
+    }
+    if (tool === "obstaclePlace") {
+      addObstacle({ lat, lng: lon, kind: "other" });
+      eventBus.emit("info", "map", "Препятствие отмечено (ручное)");
+      return;
+    }
+    if (tool === "profilePickA") {
+      setProfileOverrideA({ lat, lng: lon });
+      setGisTool("none");
+      eventBus.emit("info", "map", "Профиль: точка A");
+      return;
+    }
+    if (tool === "profilePickB") {
+      setProfileOverrideB({ lat, lng: lon });
+      setGisTool("none");
+      eventBus.emit("info", "map", "Профиль: точка B");
+      return;
+    }
+
     if (pickStationPosRef.current) {
-      void moveActiveStation(lat, lon).then(() => {
-        setPickStationPos(false);
-        eventBus.emit("info", "map", "Точка станции задана");
+      void placeOrMoveNsu(lat, lon).then((st) => {
+        setStations((prev) => {
+          const i = prev.findIndex((x) => x.id === st.id);
+          if (i < 0) return [...prev, st];
+          const next = [...prev];
+          next[i] = st;
+          return next;
+        });
+        eventBus.emit(
+          "info",
+          "map",
+          `НСУ: ${st.latitude.toFixed(5)}, ${st.longitude.toFixed(5)}`,
+        );
       });
       return;
     }
@@ -486,7 +571,13 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         signed = Math.min(azMax, Math.max(azMin, signed));
         setSimAzimuthDeg(signed);
       }
-      eventBus.emit("info", "map", "Направление полёта задано");
+      eventBus.emit("info", "map", "Цель / направление задано");
+      return;
+    }
+
+    if (pickMarkerRef.current) {
+      addMapMarker(lat, lon);
+      eventBus.emit("info", "map", "Точка добавлена");
       return;
     }
 
@@ -511,15 +602,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   };
 
   const addMarkerHere = () => {
-    setMarkers((prev) => [
-      ...prev,
-      {
-        id: `m_${Date.now().toString(36)}`,
-        lng: center.lon,
-        lat: center.lat,
-        label: `Метка ${prev.length + 1}`,
-      },
-    ]);
+    addMapMarker(center.lat, center.lon);
   };
 
   const zoomBy = (delta: number) => {
@@ -530,7 +613,12 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     on ? "ags-glass-btn ags-glass-btn--active" : "ags-glass-btn";
 
   const rangeRingPath = useMemo(() => {
-    if ((!showRangeRing && !showRadiusPref) || !active || size.w <= 0)
+    if (
+      !layers.radius ||
+      (!showRangeRing && !showRadiusPref) ||
+      !active ||
+      size.w <= 0
+    )
       return null;
     const pts: string[] = [];
     for (let i = 0; i <= 72; i++) {
@@ -551,11 +639,12 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     rangeKm,
     showRangeRing,
     showRadiusPref,
+    layers.radius,
     size.w,
   ]);
 
   const horizonPath = useMemo(() => {
-    if (!horizon?.points.length || size.w <= 0) return null;
+    if (!layers.radius || !horizon?.points.length || size.w <= 0) return null;
     const pts = horizon.points.map((p, i) => {
       const s = project(p.lng, p.lat);
       return `${i === 0 ? "M" : "L"}${s.x.toFixed(1)},${s.y.toFixed(1)}`;
@@ -564,7 +653,8 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   }, [horizon, project, size.w]);
 
   const controlSectorPath = useMemo(() => {
-    if (!plannerMode || !active || size.w <= 0) return null;
+    if (!layers.antennaSector || !plannerMode || !active || size.w <= 0)
+      return null;
     return sectorPolygon(
       active.latitude,
       active.longitude,
@@ -576,6 +666,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   }, [
     active,
     controlPatchDeg,
+    layers.antennaSector,
     plannerMode,
     project,
     rangeKm,
@@ -584,7 +675,8 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   ]);
 
   const videoSectorPath = useMemo(() => {
-    if (!plannerMode || !active || size.w <= 0) return null;
+    if (!layers.antennaSector || !plannerMode || !active || size.w <= 0)
+      return null;
     return sectorPolygon(
       active.latitude,
       active.longitude,
@@ -595,6 +687,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     );
   }, [
     active,
+    layers.antennaSector,
     plannerMode,
     project,
     rangeKm,
@@ -614,36 +707,73 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#0b1018]">
       <div
         ref={hostRef}
-        className="absolute inset-0 cursor-grab touch-none active:cursor-grabbing"
+        className={
+          pickStationPos ||
+          pickLookAt ||
+          pickMarker ||
+          measureMode ||
+          gisTool !== "none"
+            ? "absolute inset-0 cursor-crosshair touch-none"
+            : "absolute inset-0 cursor-grab touch-none active:cursor-grabbing"
+        }
         onWheel={onWheel}
         onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
+        onPointerMove={onHostPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onClick={onClick}
         role="presentation"
       >
-        {tiles.map((t) => (
-          <SafeTile
-            key={t.key}
-            url={t.url}
-            left={t.left}
-            top={t.top}
-            width={TILE}
-            height={TILE}
-            zIndex={0}
-          />
-        ))}
+        {layers.satellite &&
+          tiles.map((t) => (
+            <SafeTile
+              key={t.key}
+              url={t.url}
+              left={t.left}
+              top={t.top}
+              width={TILE}
+              height={TILE}
+              zIndex={0}
+            />
+          ))}
 
-        {demTiles.map((t) => (
-          <HillshadeTile
-            key={t.key}
-            demUrl={t.url}
-            left={t.left}
-            top={t.top}
-            size={t.size}
-          />
-        ))}
+        {layers.relief &&
+          demTiles.map((t) => (
+            <DemOverlayTile
+              key={`hs-${t.key}`}
+              demUrl={t.url}
+              left={t.left}
+              top={t.top}
+              size={t.size}
+              kind="hillshade"
+              opacity={layers.reliefOpacity}
+              exaggeration={Math.min(3, verticalExaggeration)}
+            />
+          ))}
+        {layers.demColormap &&
+          demTiles.map((t) => (
+            <DemOverlayTile
+              key={`cm-${t.key}`}
+              demUrl={t.url}
+              left={t.left}
+              top={t.top}
+              size={t.size}
+              kind="colormap"
+              opacity={layers.colormapOpacity}
+            />
+          ))}
+        {layers.contours &&
+          demTiles.map((t) => (
+            <DemOverlayTile
+              key={`ct-${t.key}`}
+              demUrl={t.url}
+              left={t.left}
+              top={t.top}
+              size={t.size}
+              kind="contour"
+              opacity={0.85}
+            />
+          ))}
 
         {labelTiles.map((t) => (
           <SafeTile
@@ -795,7 +925,8 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           })}
 
         {/* Station markers */}
-        {displayStations.map((s) => {
+        {layers.station &&
+          displayStations.map((s) => {
           const p = project(s.longitude, s.latitude);
           const isActive = s.id === activeStationId;
           return (
@@ -818,33 +949,138 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           );
         })}
 
-        {markers.map((m) => {
+        {layers.userPoints &&
+          mapMarkers.map((m) => {
           const p = project(m.lng, m.lat);
           return (
-            <div
+            <button
               key={m.id}
-              title={m.label}
-              className="absolute z-[2] h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-ags-accent shadow"
+              type="button"
+              title={`${m.label} · клик — удалить`}
+              className="absolute z-[2] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
               style={{ left: p.x, top: p.y }}
-            />
+              onClick={(ev) => {
+                ev.stopPropagation();
+                removeMapMarker(m.id);
+              }}
+              onPointerDown={(ev) => ev.stopPropagation()}
+            >
+              <span className="h-3 w-3 rounded-full border-2 border-white bg-sky-400 shadow" />
+              <span className="mt-0.5 max-w-[5rem] truncate rounded bg-black/60 px-1 text-[8px] text-white">
+                {m.label}
+              </span>
+            </button>
           );
         })}
 
-        {plannerMode && lookAt && (
+        {layers.drone && plannerMode && lookAt && (
           <div
             className="absolute z-[2] flex h-4 w-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-ags-accent text-[8px] font-bold text-white shadow"
             style={{
               left: project(lookAt.lng, lookAt.lat).x,
               top: project(lookAt.lng, lookAt.lat).y,
             }}
+            title="Цель B"
           >
             B
           </div>
         )}
 
+        {layers.station && plannerMode && active && (
+          <div
+            className="pointer-events-none absolute z-[3] -translate-x-1/2 translate-y-2 rounded bg-black/65 px-1.5 py-0.5 text-[9px] font-semibold text-ags-warning"
+            style={{
+              left: project(active.longitude, active.latitude).x,
+              top: project(active.longitude, active.latitude).y,
+            }}
+          >
+            НСУ
+          </div>
+        )}
+
+        {layers.route &&
+          routes.map((r) => {
+            if (r.points.length === 0) return null;
+            const pts = r.points.map((p) => project(p.lng, p.lat));
+            const d = pts
+              .map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`)
+              .join(" ");
+            return (
+              <svg
+                key={r.id}
+                className="pointer-events-none absolute inset-0 z-[4] h-full w-full"
+              >
+                <path
+                  d={d}
+                  fill="none"
+                  stroke="#7dd3fc"
+                  strokeWidth={2}
+                  strokeDasharray="6 4"
+                />
+                {pts.map((p, i) => (
+                  <circle
+                    key={r.points[i]!.id}
+                    cx={p.x}
+                    cy={p.y}
+                    r={4}
+                    fill="#0ea5e9"
+                    stroke="#fff"
+                    strokeWidth={1}
+                  />
+                ))}
+              </svg>
+            );
+          })}
+
+        {layers.obstacles &&
+          obstacles.map((o) => {
+            const p = project(o.lng, o.lat);
+            return (
+              <div
+                key={o.id}
+                className="pointer-events-none absolute z-[4] -translate-x-1/2 -translate-y-1/2 rounded bg-red-700/90 px-1 text-[8px] text-white"
+                style={{ left: p.x, top: p.y }}
+                title={`${o.name} · источник: ${o.source}`}
+              >
+                ▲
+              </div>
+            );
+          })}
+
+        {layers.measurements && measureDraft.length > 0 && (
+          <svg className="pointer-events-none absolute inset-0 z-[5] h-full w-full">
+            {measureDraft.map((p, i) => {
+              const s = project(p.lng, p.lat);
+              return (
+                <circle
+                  key={`md-${i}`}
+                  cx={s.x}
+                  cy={s.y}
+                  r={4}
+                  fill="#fbbf24"
+                  stroke="#fff"
+                />
+              );
+            })}
+            {measureDraft.length >= 2 && (
+              <path
+                d={measureDraft
+                  .map((p, i) => {
+                    const s = project(p.lng, p.lat);
+                    return `${i === 0 ? "M" : "L"}${s.x},${s.y}`;
+                  })
+                  .join(" ")}
+                fill="rgba(251,191,36,0.15)"
+                stroke="#fbbf24"
+                strokeWidth={1.5}
+              />
+            )}
+          </svg>
+        )}
+
         {(() => {
           const d = droneEff();
-          if (d.source === "none" || size.w <= 0) return null;
+          if (!layers.drone || d.source === "none" || size.w <= 0) return null;
           const p = project(d.lng, d.lat);
           const a = active
             ? project(active.longitude, active.latitude)
@@ -953,8 +1189,45 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         >
           Смоленск
         </button>
+        {plannerMode && (
+          <>
+            <button
+              type="button"
+              className={toolBtn(pickStationPos)}
+              title="Клик по карте — поставить / сдвинуть НСУ"
+              onClick={() => {
+                setPickStationPos(!pickStationPos);
+                setMeasureMode(false);
+              }}
+            >
+              {pickStationPos ? "Клик: НСУ…" : "НСУ"}
+            </button>
+            <button
+              type="button"
+              className={toolBtn(pickLookAt)}
+              title="Клик по карте — цель / направление B"
+              onClick={() => {
+                setPickLookAt(!pickLookAt);
+                setMeasureMode(false);
+              }}
+            >
+              {pickLookAt ? "Клик: цель…" : "Цель B"}
+            </button>
+            <button
+              type="button"
+              className={toolBtn(pickMarker)}
+              title="Клик по карте — свободная точка"
+              onClick={() => {
+                setPickMarker(!pickMarker);
+                setMeasureMode(false);
+              }}
+            >
+              {pickMarker ? "Клик: точка…" : "Точка"}
+            </button>
+          </>
+        )}
         <button type="button" className={toolBtn(false)} onClick={addMarkerHere}>
-          Метка
+          Метка@центр
         </button>
         <button
           type="button"
@@ -962,25 +1235,39 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           onClick={() => {
             setMeasureMode((v) => !v);
             setMeasureA(null);
+            if (!measureMode) {
+              setPickStationPos(false);
+              setPickLookAt(false);
+              setPickMarker(false);
+            }
           }}
         >
           {measureMode ? "Стоп линейка" : "Линейка"}
         </button>
         <button
           type="button"
-          className={toolBtn(reliefOn)}
+          className={toolBtn(layers.relief)}
           onClick={() => {
-            setReliefOn((v) => !v);
+            useGisStore.getState().setLayer("relief", !layers.relief);
             eventBus.emit(
               "info",
               "map",
-              reliefOn
+              layers.relief
                 ? "Рельеф (hillshade) выкл"
                 : "Рельеф: Terrarium hillshade поверх спутника",
             );
           }}
         >
           Рельеф
+        </button>
+        <button
+          type="button"
+          className={toolBtn(layers.demColormap)}
+          onClick={() =>
+            useGisStore.getState().setLayer("demColormap", !layers.demColormap)
+          }
+        >
+          Высоты
         </button>
         <button
           type="button"
@@ -1056,15 +1343,18 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
             </div>
           )}
           {!active && (
-            <div className="text-ags-warning">
-              Выберите станцию, чтобы задать точку и направление.
+            <div className="text-ags-muted">
+              Нажмите <span className="text-ags-accent">НСУ</span> и кликните
+              карту — станция создаётся без выбора из дерева.
             </div>
           )}
-          {(pickStationPos || pickLookAt) && (
+          {(pickStationPos || pickLookAt || pickMarker) && (
             <div className="text-ags-accent">
               {pickStationPos
-                ? "Клик по карте — точка станции."
-                : "Клик по карте — направление полёта."}
+                ? "Клик по карте — поставить НСУ."
+                : pickLookAt
+                  ? "Клик по карте — цель / направление B."
+                  : "Клик по карте — свободная точка."}
             </div>
           )}
         </div>

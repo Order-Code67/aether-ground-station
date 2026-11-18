@@ -90,8 +90,34 @@ export function AimingControls() {
 
   if (!st) {
     return (
-      <div className="p-3 text-xs text-ags-muted">
-        Выберите станцию — затем точка, направление и серво вручную.
+      <div className="flex flex-col gap-2 p-3 text-xs" data-testid="aiming-controls">
+        <p className="text-ags-muted">
+          НСУ ещё нет. Поставьте точку на карте — станция создастся сама.
+        </p>
+        <div className="flex flex-wrap gap-1">
+          <button
+            type="button"
+            className={
+              pickStationPos
+                ? "rounded bg-ags-accent px-2 py-1 text-white"
+                : "rounded border border-ags-border px-2 py-1"
+            }
+            onClick={() => setPickStationPos(!pickStationPos)}
+          >
+            {pickStationPos ? "Клик: НСУ…" : "Поставить НСУ"}
+          </button>
+          <button
+            type="button"
+            className={
+              pickLookAt
+                ? "rounded bg-ags-accent px-2 py-1 text-white"
+                : "rounded border border-ags-border px-2 py-1"
+            }
+            onClick={() => setPickLookAt(!pickLookAt)}
+          >
+            {pickLookAt ? "Клик: цель…" : "Поставить цель B"}
+          </button>
+        </div>
       </div>
     );
   }
@@ -212,7 +238,7 @@ export function AimingControls() {
           }
           onClick={() => setPickStationPos(!pickStationPos)}
         >
-          {pickStationPos ? "Клик: точка…" : "Точка станции"}
+          {pickStationPos ? "Клик: НСУ…" : "Поставить НСУ"}
         </button>
         <button
           type="button"
@@ -223,7 +249,7 @@ export function AimingControls() {
           }
           onClick={() => setPickLookAt(!pickLookAt)}
         >
-          {pickLookAt ? "Клик: направление…" : "Направление полёта"}
+          {pickLookAt ? "Клик: цель…" : "Поставить цель B"}
         </button>
       </div>
 

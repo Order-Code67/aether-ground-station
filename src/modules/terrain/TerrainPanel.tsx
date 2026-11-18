@@ -5,11 +5,9 @@ import {
   getTerrainAdapter,
   setTerrainAdapter,
   createManualElevationAdapter,
-  createGeoTiffAdapter,
   type TerrainProfilePoint,
 } from "@/services/terrain/terrainEngine";
 import { emitDomain } from "@/services/events/domainEvents";
-import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "@/services/tauri";
 import { useStationPlannerStore } from "@/stores/stationPlannerStore";
 import { haversineM } from "@/utils/geo";
@@ -38,44 +36,24 @@ export function TerrainPanel({
   const simAz = useStationPlannerStore((s) => s.simAzimuthDeg);
   const st = stations.find((s) => s.id === activeStationId);
 
-  const inspectGeoTiff = async () => {
-    if (!geotiffPath.trim()) return;
+  const inspectGeoTiff = async (fromDialog = false) => {
     if (!isTauriRuntime()) {
-      setNote("GeoTIFF inspect только в desktop");
+      setNote("GeoTIFF только в desktop");
       return;
     }
     try {
-      const info = await invoke<{
-        validTiff: boolean;
-        width?: number;
-        height?: number;
-        message: string;
-        path: string;
-      }>("terrain_inspect_geotiff", { path: geotiffPath.trim() });
-      setNote(info.message);
-      if (info.validTiff) {
-        await invoke("terrain_register_source", {
-          id: `dem_${Date.now().toString(36)}`,
-          name: info.path,
-          sourceType: "geotiff",
-          path: info.path,
-          resolutionM: null,
-        });
-        setTerrainAdapter(createGeoTiffAdapter(info.path), {
-          id: "geotiff",
-          name: info.path,
-          sourceType: "geotiff",
-          path: info.path,
-        });
-        setMeta({
-          id: "geotiff",
-          name: info.path,
-          sourceType: "geotiff",
-          path: info.path,
-        });
-        emitDomain("TerrainDataLoaded", "terrain", info.message, {
-          width: info.width,
-          height: info.height,
+      const { pickAndLoadGeoTiff, loadGeoTiffFromPath } = await import(
+        "@/services/terrain/geotiffDem"
+      );
+      const r = fromDialog
+        ? await pickAndLoadGeoTiff()
+        : await loadGeoTiffFromPath(geotiffPath.trim());
+      setNote(r.message);
+      if (r.ok && r.path) {
+        setGeotiffPath(r.path);
+        setMeta(r.meta);
+        emitDomain("TerrainDataLoaded", "terrain", r.message, {
+          path: r.path,
         });
       }
     } catch (e) {
@@ -232,10 +210,17 @@ export function TerrainPanel({
           />
           <button
             type="button"
-            className="rounded border border-ags-border px-2 py-1 text-xs"
-            onClick={() => void inspectGeoTiff()}
+            className="rounded bg-ags-accent px-2 py-1 text-xs text-white"
+            onClick={() => void inspectGeoTiff(true)}
           >
-            Inspect GeoTIFF
+            Установить GeoTIFF…
+          </button>
+          <button
+            type="button"
+            className="rounded border border-ags-border px-2 py-1 text-xs"
+            onClick={() => void inspectGeoTiff(false)}
+          >
+            Загрузить путь
           </button>
         </div>
       )}

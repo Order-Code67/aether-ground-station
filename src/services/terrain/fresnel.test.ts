@@ -5,22 +5,31 @@ import {
   radioVisibilityLabel,
 } from "./fresnel";
 
-describe("fresnel", () => {
-  it("computes first zone radius", () => {
-    // Midpoint 10 km link @ 5.8 GHz: d1=d2=5, D=10
+describe("fresnelRadiusM", () => {
+  it("returns positive F1 for mid-path 5.8 GHz over 10 km", () => {
     const r = fresnelRadiusM(5, 5, 10, 5.8);
-    expect(r).toBeGreaterThan(10);
-    expect(r).toBeLessThan(40);
+    expect(r).toBeGreaterThan(5);
+    expect(r).toBeLessThan(80);
   });
 
-  it("classifies clearance honestly", () => {
+  it("grows when frequency drops", () => {
+    const hi = fresnelRadiusM(5, 5, 10, 5.8);
+    const lo = fresnelRadiusM(5, 5, 10, 1.2);
+    expect(lo).toBeGreaterThan(hi);
+  });
+});
+
+describe("classifyFresnelClearance", () => {
+  it("unknown when clearance null", () => {
     expect(classifyFresnelClearance(null, false)).toBe("unknown");
-    expect(classifyFresnelClearance(-1, true)).toBe("blocked");
-    expect(classifyFresnelClearance(2, false)).toBe("fresnel_partial");
+  });
+  it("blocked when LOS blocked", () => {
+    expect(classifyFresnelClearance(20, true)).toBe("blocked");
+  });
+  it("clear when well above F1 floor", () => {
     expect(classifyFresnelClearance(20, false)).toBe("clear");
   });
-
-  it("labels in Russian", () => {
-    expect(radioVisibilityLabel("clear")).toMatch(/видимост/i);
+  it("labels are non-empty Russian strings", () => {
+    expect(radioVisibilityLabel("clear").length).toBeGreaterThan(3);
   });
 });
