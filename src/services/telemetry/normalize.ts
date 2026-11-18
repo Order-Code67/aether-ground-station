@@ -22,6 +22,10 @@ export interface TelemetrySample {
   at: string;
   voltageV: number | null;
   temperatureC: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  altitudeM?: number | null;
+  adapterId?: string | null;
 }
 
 export type TelemetryAdapterId =
@@ -254,10 +258,11 @@ export function listTelemetryAdapters(): TelemetryAdapter[] {
 }
 
 export function exportTelemetryCsv(samples: TelemetrySample[]): string {
-  const header = "at,voltage_v,temperature_c";
+  const header =
+    "at,voltage_v,temperature_c,latitude,longitude,altitude_m,adapter";
   const rows = samples.map(
     (s) =>
-      `${s.at},${s.voltageV ?? ""},${s.temperatureC ?? ""}`,
+      `${s.at},${s.voltageV ?? ""},${s.temperatureC ?? ""},${s.latitude ?? ""},${s.longitude ?? ""},${s.altitudeM ?? ""},${s.adapterId ?? ""}`,
   );
   return [header, ...rows].join("\n");
 }

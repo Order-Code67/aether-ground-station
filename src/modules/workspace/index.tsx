@@ -1,7 +1,9 @@
 import { WorkspaceCanvas } from "./WorkspaceCanvas";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { useAuthStore } from "@/stores/authStore";
+import { useSelectionStore } from "@/stores/selectionStore";
 import { PANEL_KIND_LABELS } from "@/types";
-import { templateLabel } from "./templates";
+import { templateLabel, WORKSPACE_TEMPLATES } from "./templates";
 
 export function WorkspaceView() {
   const layouts = useWorkspaceStore((s) => s.layouts);
@@ -11,9 +13,14 @@ export function WorkspaceView() {
   const togglePanel = useWorkspaceStore((s) => s.togglePanel);
   const duplicateActive = useWorkspaceStore((s) => s.duplicateActive);
   const applyTemplate = useWorkspaceStore((s) => s.applyTemplate);
+  const applyRolePack = useWorkspaceStore((s) => s.applyRolePack);
+  const role = useAuthStore((s) => s.session?.user.role) ?? "Operator";
+  const complexId = useSelectionStore((s) => s.complexId);
+  const siteId = useSelectionStore((s) => s.siteId);
+  const stationId = useSelectionStore((s) => s.stationId);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col" data-testid="workspace-view">
       <div className="flex flex-wrap items-center gap-1 border-b border-ags-border-subtle px-2 py-1.5">
         {layouts.map((l) => (
           <button
@@ -44,6 +51,28 @@ export function WorkspaceView() {
         >
           Дублировать
         </button>
+        <button
+          type="button"
+          className="rounded border border-ags-accent/40 px-2 py-0.5 text-xs text-ags-accent"
+          onClick={() => applyRolePack(role)}
+          title={`Пакет роли ${role}`}
+        >
+          Пакет: {role}
+        </button>
+        {WORKSPACE_TEMPLATES.map((t) => (
+          <button
+            key={t}
+            type="button"
+            className="rounded border border-ags-border px-2 py-0.5 text-[10px] text-ags-dim"
+            onClick={() => applyTemplate(t)}
+          >
+            {templateLabel(t)}
+          </button>
+        ))}
+      </div>
+      <div className="border-b border-ags-border-subtle px-4 py-1 font-mono text-[10px] text-ags-dim">
+        Sync: complex={complexId ?? "—"} · site={siteId ?? "—"} · station=
+        {stationId ?? "—"}
       </div>
       <div className="flex flex-wrap items-center gap-2 border-b border-ags-border-subtle px-4 py-2 text-xs text-ags-muted">
         <span className="font-semibold text-ags-fg">{layout.name}</span>

@@ -10,4 +10,12 @@ describe("calcAntennaCenterAmsl", () => {
     expect(calcAntennaCenterAmsl(null, 10, 2)).toBeNull();
     expect(calcAntennaCenterAmsl(undefined, 10, 2)).toBeNull();
   });
+
+  it("returns null when mast unknown", () => {
+    expect(calcAntennaCenterAmsl(180, null, 2)).toBeNull();
+  });
+
+  it("treats missing offset as 0 when mast known", () => {
+    expect(calcAntennaCenterAmsl(100, 5, null)).toBe(105);
+  });
 });

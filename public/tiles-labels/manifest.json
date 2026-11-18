@@ -1,0 +1,6 @@
+{
+  "source": "Esri World Boundaries and Places",
+  "templateLocal": "/tiles-labels/{z}/{x}/{y}.png",
+  "tileCount": 9636,
+  "fetchedAt": "2026-11-12T20:48:03.773Z"
+}

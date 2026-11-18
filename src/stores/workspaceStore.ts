@@ -1,13 +1,28 @@
 import { create } from "zustand";
-import type { WorkspaceLayout, WorkspaceTemplateId } from "@/types";
+import type { UserRole, WorkspaceLayout, WorkspaceTemplateId } from "@/types";
 import { createTemplateLayout } from "@/modules/workspace/templates";
 /** Persistence: SQLite via useSqliteSync (SSOT). No localStorage dual-write. */
+
+/** GS-10 role packs → default template. */
+export function templateForRole(role: UserRole): WorkspaceTemplateId {
+  switch (role) {
+    case "Observer":
+      return "map";
+    case "Operator":
+      return "standard";
+    case "Administrator":
+      return "engineering";
+    default:
+      return "standard";
+  }
+}
 
 interface WorkspaceState {
   layouts: WorkspaceLayout[];
   activeLayoutId: string;
   active: () => WorkspaceLayout;
   applyTemplate: (template: WorkspaceTemplateId) => void;
+  applyRolePack: (role: UserRole) => void;
   setActiveLayout: (id: string) => void;
   renameActive: (name: string) => void;
   togglePanel: (panelId: string) => void;
@@ -40,6 +55,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   applyTemplate: (template) => {
     const layout = createTemplateLayout(template);
+    set((s) => ({
+      layouts: [...s.layouts, layout],
+      activeLayoutId: layout.id,
+    }));
+  },
+
+  applyRolePack: (role) => {
+    const template = templateForRole(role);
+    const name =
+      role === "Observer"
+        ? "Observer pack"
+        : role === "Operator"
+          ? "Operator pack"
+          : "Admin / Engineer pack";
+    const layout = createTemplateLayout(template, name);
     set((s) => ({
       layouts: [...s.layouts, layout],
       activeLayoutId: layout.id,

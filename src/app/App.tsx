@@ -1,9 +1,10 @@
 import { useEffect } from "react";
 import { AppShell } from "@/components/layout";
-import { LoginScreen } from "@/components/auth/LoginScreen";
 import { ModuleErrorBoundary } from "@/components/common/ModuleErrorBoundary";
 import { useAppBootstrap } from "@/hooks/useAppBootstrap";
 import { useSqliteSync } from "@/hooks/useSqliteSync";
+import { useAuthIdleGuard } from "@/hooks/useAuthIdleGuard";
+import { useSelectionSync } from "@/hooks/useSelectionSync";
 import { eventBus } from "@/services/events/eventBus";
 import { dbAppendEvent, dbInit, dbGetJson } from "@/services/database";
 import { deviceManager } from "@/services/devices/deviceManager";
@@ -14,10 +15,13 @@ import type { DeviceCard } from "@/types";
 export default function App() {
   useAppBootstrap();
   useSqliteSync();
+  useAuthIdleGuard();
+  useSelectionSync();
   const append = useEventLogStore((s) => s.append);
   const ready = useAuthStore((s) => s.ready);
   const session = useAuthStore((s) => s.session);
   const bootstrapAuth = useAuthStore((s) => s.bootstrap);
+  const autoEnter = useAuthStore((s) => s.autoEnter);
 
   useEffect(() => {
     return eventBus.subscribe((event) => {
@@ -48,19 +52,18 @@ export default function App() {
     })();
   }, [bootstrapAuth]);
 
-  if (!ready) {
+  // Safety net: never stick on a login wall for local desktop GS.
+  useEffect(() => {
+    if (ready && !session) {
+      void autoEnter();
+    }
+  }, [ready, session, autoEnter]);
+
+  if (!ready || !session) {
     return (
       <div className="flex h-full items-center justify-center bg-ags-bg text-ags-muted">
         Загрузка…
       </div>
-    );
-  }
-
-  if (!session) {
-    return (
-      <ModuleErrorBoundary name="Вход">
-        <LoginScreen />
-      </ModuleErrorBoundary>
     );
   }
 

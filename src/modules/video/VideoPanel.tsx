@@ -22,7 +22,13 @@ import { eventBus } from "@/services/events/eventBus";
 import { useArchiveStore } from "@/stores/archiveStore";
 import { deviceManager } from "@/services/devices/deviceManager";
 
-export function VideoPanel() {
+export function VideoPanel({
+  tileId = "main",
+  compact = false,
+}: {
+  tileId?: string;
+  compact?: boolean;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -99,12 +105,12 @@ export function VideoPanel() {
     const adapter = getVideoAdapter(adapterKind);
     const sourceId =
       adapterKind === "mediadevices" ? selected : sourceUrl.trim();
-    const cardId = `video:${adapterKind}:${sourceId || "default"}`;
+    const cardId = `video:${tileId}:${adapterKind}:${sourceId || "default"}`;
     if (adapterKind === "rtsp" && sourceId) {
-      deviceManager.saveIntent("rtsp", { url: sourceId });
+      deviceManager.saveIntent("rtsp", { url: sourceId, tileId });
     }
     if (adapterKind === "mediadevices" && sourceId) {
-      deviceManager.saveIntent("uvc", { deviceId: sourceId });
+      deviceManager.saveIntent("uvc", { deviceId: sourceId, tileId });
     }
     try {
       const opened = await adapter.open(sourceId);
@@ -114,12 +120,20 @@ export function VideoPanel() {
         setSignal("connecting");
         deviceManager.upsert({
           id: cardId,
-          name: adapter.label,
+          name: `${adapter.label} (${tileId})`,
           connectionType: "capture",
           address: sourceId || undefined,
           status: "Online",
           lastSeenAt: new Date().toISOString(),
           capabilities: ["video", "rtsp-bridge"],
+        });
+        deviceManager.registerReconnectHandler(cardId, async () => {
+          await cleanupMedia();
+          const again = await adapter.open(sourceId);
+          if (!isRtspBridgeHandle(again)) throw new Error("RTSP bridge lost");
+          bridgeRef.current = again;
+          setBridgeMode(true);
+          setSignal("connecting");
         });
         eventBus.emit("info", "video", `Видео: ${adapter.label}`);
         return;
@@ -133,7 +147,7 @@ export function VideoPanel() {
       setSignal("streaming");
       deviceManager.upsert({
         id: cardId,
-        name: adapter.label,
+        name: `${adapter.label} (${tileId})`,
         connectionType: "capture",
         address: sourceId || undefined,
         status: "Online",
@@ -322,7 +336,7 @@ export function VideoPanel() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-2 p-3">
+    <div className={`flex h-full flex-col gap-2 ${compact ? "p-1.5" : "p-3"}`}>
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <select
           className="rounded border border-ags-border bg-ags-elevated px-2 py-1 text-ags-fg"
@@ -330,10 +344,10 @@ export function VideoPanel() {
           onChange={(e) =>
             setAdapterKind(e.target.value as VideoAdapterKind)
           }
+          aria-label={`Источник видео ${tileId}`}
         >
           <option value="mediadevices">UVC / HDMI</option>
           <option value="rtsp">RTSP</option>
-          <option value="webrtc">WebRTC (signaling only)</option>
         </select>
         {adapterKind === "mediadevices" ? (
           <>

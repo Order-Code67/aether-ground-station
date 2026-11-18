@@ -861,12 +861,20 @@ mod tests {
         file.extend_from_slice(&tie);
         file.extend_from_slice(&payload);
 
+        let uniq = format!(
+            "{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
         let name = if tiled {
-            "ags_dem_f32_tiled.tif"
+            format!("ags_dem_f32_tiled_{uniq}.tif")
         } else if deflate {
-            "ags_dem_f32_deflate.tif"
+            format!("ags_dem_f32_deflate_{uniq}.tif")
         } else {
-            "ags_dem_f32.tif"
+            format!("ags_dem_f32_{uniq}.tif")
         };
         let path = std::env::temp_dir().join(name);
         std::fs::write(&path, &file).unwrap();
@@ -874,14 +882,23 @@ mod tests {
     }
 
     fn write_test_float_geotiff_lzw_marked() -> PathBuf {
-        // Same layout as strip float DEM but Compression=5 (LZW) — must N/A.
+        // Own fixture bytes (do not share temp path with parallel uncompressed test).
         let path = write_test_float_geotiff(false, false);
         let mut file = std::fs::read(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
         // IFD entry for tag 259 is the 4th entry (index 3): offset 8+2+3*12 = 46
         // value short at +8 within entry → absolute 54
         let comp_val_off = 8 + 2 + 3 * 12 + 8;
+        assert!(file.len() > comp_val_off + 2, "fixture too short");
         file[comp_val_off..comp_val_off + 2].copy_from_slice(&5u16.to_le_bytes());
-        let out = std::env::temp_dir().join("ags_dem_f32_lzw.tif");
+        let out = std::env::temp_dir().join(format!(
+            "ags_dem_f32_lzw_{}_{}.tif",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
         std::fs::write(&out, &file).unwrap();
         out
     }

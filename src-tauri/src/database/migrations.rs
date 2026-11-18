@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection};
 
-/// Versioned migrations. Current schema version = 4 (outbox attempts/failed).
-pub const SCHEMA_VERSION: i64 = 4;
+/// Versioned migrations. Current schema version = 5 (GS-2 complex/site + mounts).
+pub const SCHEMA_VERSION: i64 = 5;
 
 pub fn apply_migrations(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
@@ -35,6 +35,10 @@ pub fn apply_migrations(conn: &Connection) -> Result<(), String> {
     if current < 4 {
         migrate_v4(conn)?;
         stamp(conn, 4)?;
+    }
+    if current < 5 {
+        migrate_v5(conn)?;
+        stamp(conn, 5)?;
     }
 
     // Ensure foreign keys on for this connection
@@ -307,4 +311,148 @@ fn migrate_v4(conn: &Connection) -> Result<(), String> {
     );
     let _ = conn.execute("ALTER TABLE sync_outbox ADD COLUMN last_error TEXT", []);
     Ok(())
+}
+
+/// GS-2/4: site↔complex, nullable mast, station meta, antenna mounts, scenarios, equipment links.
+fn migrate_v5(conn: &Connection) -> Result<(), String> {
+    let _ = conn.execute("ALTER TABLE station_sites ADD COLUMN complex_id TEXT", []);
+    let _ = conn.execute(
+        "ALTER TABLE station_sites ADD COLUMN status TEXT NOT NULL DEFAULT 'unknown'",
+        [],
+    );
+    let _ = conn.execute("ALTER TABLE station_sites ADD COLUMN address TEXT", []);
+    let _ = conn.execute("ALTER TABLE station_sites ADD COLUMN created_at TEXT", []);
+    let _ = conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sites_complex ON station_sites(complex_id)",
+        [],
+    );
+
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS stations_v5 (
+          id TEXT PRIMARY KEY,
+          complex_id TEXT,
+          site_id TEXT,
+          name TEXT NOT NULL,
+          description TEXT,
+          status TEXT NOT NULL DEFAULT 'unknown',
+          latitude REAL NOT NULL,
+          longitude REAL NOT NULL,
+          terrain_elevation_m REAL,
+          mast_height_m REAL,
+          antenna_offset_m REAL,
+          antenna_center_amsl_m REAL,
+          mast_type TEXT,
+          antenna_type TEXT,
+          equipment_model TEXT,
+          azimuth_deg REAL,
+          azimuth_ref TEXT DEFAULT 'true',
+          elevation_deg REAL,
+          tilt_deg REAL,
+          pan_tilt_status TEXT,
+          equipment_status TEXT,
+          notes TEXT,
+          payload TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY(complex_id) REFERENCES complexes(id) ON DELETE SET NULL,
+          FOREIGN KEY(site_id) REFERENCES station_sites(id) ON DELETE SET NULL
+        );
+        INSERT OR IGNORE INTO stations_v5(
+          id, complex_id, site_id, name, description, status, latitude, longitude,
+          terrain_elevation_m, mast_height_m, antenna_offset_m, antenna_center_amsl_m,
+          mast_type, antenna_type, equipment_model, azimuth_deg, azimuth_ref,
+          elevation_deg, tilt_deg, pan_tilt_status, equipment_status, notes,
+          payload, created_at, updated_at
+        )
+        SELECT
+          id, complex_id, site_id, name, NULL, 'unknown', latitude, longitude,
+          terrain_elevation_m, mast_height_m, antenna_offset_m, antenna_center_amsl_m,
+          mast_type, antenna_type, equipment_model, azimuth_deg, azimuth_ref,
+          elevation_deg, tilt_deg, pan_tilt_status, equipment_status, notes,
+          payload, updated_at, updated_at
+        FROM stations;
+        DROP TABLE stations;
+        ALTER TABLE stations_v5 RENAME TO stations;
+        CREATE INDEX IF NOT EXISTS idx_stations_complex ON stations(complex_id);
+        CREATE INDEX IF NOT EXISTS idx_stations_site ON stations(site_id);
+        CREATE INDEX IF NOT EXISTS idx_stations_coords ON stations(latitude, longitude);
+
+        CREATE TABLE IF NOT EXISTS station_antenna_mounts (
+          id TEXT PRIMARY KEY,
+          station_id TEXT NOT NULL,
+          antenna_profile_id TEXT,
+          label TEXT,
+          mount_height_m REAL,
+          azimuth_deg REAL,
+          elevation_deg REAL,
+          tilt_deg REAL,
+          azimuth_source TEXT,
+          updated_at TEXT NOT NULL,
+          payload TEXT NOT NULL DEFAULT '{}',
+          FOREIGN KEY(station_id) REFERENCES stations(id) ON DELETE CASCADE,
+          FOREIGN KEY(antenna_profile_id) REFERENCES antenna_profiles(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mounts_station ON station_antenna_mounts(station_id);
+
+        CREATE TABLE IF NOT EXISTS station_placement_scenarios (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          complex_id TEXT,
+          payload TEXT NOT NULL DEFAULT '{}',
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY(complex_id) REFERENCES complexes(id) ON DELETE SET NULL
+        );
+        "#,
+    )
+    .map_err(|e| e.to_string())?;
+
+    for sql in [
+        "ALTER TABLE mast_profiles ADD COLUMN manufacturer TEXT",
+        "ALTER TABLE mast_profiles ADD COLUMN model TEXT",
+        "ALTER TABLE mast_profiles ADD COLUMN mount_point_height_m REAL",
+        "ALTER TABLE mast_profiles ADD COLUMN levels INTEGER",
+        "ALTER TABLE antenna_profiles ADD COLUMN antenna_type TEXT",
+        "ALTER TABLE antenna_profiles ADD COLUMN frequency_range TEXT",
+        "ALTER TABLE antenna_profiles ADD COLUMN polarization TEXT",
+        "ALTER TABLE antenna_profiles ADD COLUMN gain_dbi REAL",
+        "ALTER TABLE antenna_profiles ADD COLUMN beamwidth_deg REAL",
+        "ALTER TABLE antenna_profiles ADD COLUMN connector TEXT",
+        "ALTER TABLE antenna_profiles ADD COLUMN mass_kg REAL",
+        "ALTER TABLE antenna_profiles ADD COLUMN dimensions TEXT",
+        "ALTER TABLE equipment_inventory ADD COLUMN station_id TEXT",
+        "ALTER TABLE equipment_inventory ADD COLUMN complex_id TEXT",
+        "ALTER TABLE equipment_inventory ADD COLUMN site_id TEXT",
+        "ALTER TABLE equipment_inventory ADD COLUMN category TEXT",
+        "ALTER TABLE equipment_inventory ADD COLUMN installed_at TEXT",
+    ] {
+        let _ = conn.execute(sql, []);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{apply_migrations, SCHEMA_VERSION};
+    use rusqlite::Connection;
+
+    #[test]
+    fn migrations_apply_to_v5() {
+        let conn = Connection::open_in_memory().unwrap();
+        apply_migrations(&conn).expect("migrate");
+        let v: i64 = conn
+            .query_row("SELECT MAX(version) FROM schema_migrations", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(v, SCHEMA_VERSION);
+        let n: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE name='station_antenna_mounts'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 1);
+    }
 }

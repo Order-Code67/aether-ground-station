@@ -10,6 +10,12 @@ export type DeviceStatus =
 
 export type ConnectionType = "ethernet" | "usb" | "wifi" | "uart" | "capture";
 
+export interface DeviceConnectionEvent {
+  at: string;
+  kind: "online" | "offline" | "error" | "reconnect" | "lost" | "info";
+  message: string;
+}
+
 export interface DeviceCard {
   id: string;
   name: string;
@@ -19,6 +25,9 @@ export interface DeviceCard {
   address?: string;
   status: DeviceStatus;
   lastSeenAt?: string;
+  lastError?: string | null;
+  /** Recent connection timeline (newest first, capped). */
+  history?: DeviceConnectionEvent[];
   firmwareVersion?: string;
   capabilities: string[];
 }
