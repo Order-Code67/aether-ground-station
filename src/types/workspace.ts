@@ -48,6 +48,7 @@ export interface WorkspaceLayout {
 
 export const PANEL_KIND_LABELS: Record<PanelKind, string> = {
   video: "Видео",
+  vision: "Vision",
   walksnail: "Walksnail",
   map: "Карта",
   stations: "Станции",

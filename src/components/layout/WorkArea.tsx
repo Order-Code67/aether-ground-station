@@ -19,6 +19,9 @@ const WorkspaceView = lazy(() =>
 const VideoView = lazy(() =>
   import("@/modules/video").then((m) => ({ default: m.VideoView })),
 );
+const VisionView = lazy(() =>
+  import("@/modules/vision").then((m) => ({ default: m.VisionView })),
+);
 const WalksnailView = lazy(() =>
   import("@/modules/walksnail").then((m) => ({ default: m.WalksnailView })),
 );
@@ -89,6 +92,7 @@ const VIEWS: Record<ModuleId, ComponentType> = {
   catalogs: CatalogsView,
   workspace: WorkspaceView,
   video: VideoView,
+  vision: VisionView,
   walksnail: WalksnailView,
   map: MapView,
   stations: StationsView,

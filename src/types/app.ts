@@ -5,6 +5,7 @@ export type ModuleId =
   | "catalogs"
   | "workspace"
   | "video"
+  | "vision"
   | "walksnail"
   | "map"
   | "stations"
@@ -82,6 +83,12 @@ export const MODULES: readonly ModuleDefinition[] = [
     label: "Видео",
     stage: 3,
     description: "Video Engine",
+  },
+  {
+    id: "vision",
+    label: "Vision",
+    stage: 3,
+    description: "aether-vision · detect / follow / land / avoid overlay",
   },
   {
     id: "walksnail",

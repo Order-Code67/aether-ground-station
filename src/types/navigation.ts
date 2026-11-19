@@ -35,7 +35,7 @@ export const NAV_SECTIONS: readonly NavSectionDef[] = [
   {
     id: "video",
     label: "Видео",
-    tabs: ["video", "walksnail", "archive"],
+    tabs: ["video", "vision", "walksnail", "archive"],
   },
   {
     id: "telemetry",
@@ -72,6 +72,7 @@ const MODULE_TO_SECTION: Partial<Record<ModuleId, NavSectionId>> = {
   terrain: "planning",
   pantilt: "planning",
   video: "video",
+  vision: "video",
   walksnail: "video",
   archive: "video",
   events: "events",
