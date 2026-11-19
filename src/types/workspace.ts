@@ -7,6 +7,7 @@ export type WorkspaceTemplateId =
 
 export type PanelKind =
   | "video"
+  | "vision"
   | "walksnail"
   | "map"
   | "stations"
