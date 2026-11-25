@@ -28,15 +28,60 @@ export const BUNDLED_DEM_MAX_ZOOM = 11;
 export const DEFAULT_MAP_CENTER: [number, number] = [32.045, 54.782];
 export const DEFAULT_MAP_ZOOM = 9;
 
+/**
+ * OSM Carto (raster) — улицы и подписи при z≥14. Данные OSM, лицензия ODbL.
+ * Политика OSMF: справедливое использование, не кэш всего мира в репозиторий.
+ */
+export const OSM_CARTO_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+
+/**
+ * CARTO Dark Matter — тёмная растровая база по данным OSM (ODbL).
+ * Улицы, названия, кварталы, POI. Без ключа Mapbox/Google.
+ * https://carto.com/basemaps
+ */
+export const CARTO_DARK_ALL_TILES =
+  "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
+
+/** Только подписи CARTO Dark (прозрачный слой поверх спутника / DEM). */
+export const CARTO_DARK_LABELS_TILES =
+  "https://a.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png";
+
+export const OSM_STREETS_MAX_ZOOM = 18;
+export const BUNDLED_BASE_MAX_ZOOM = 12;
+
+export const MAP_ATTR_OSM = "© OpenStreetMap contributors (ODbL)";
+export const MAP_ATTR_CARTO = "© CARTO";
+export const MAP_ATTR_ESRI = "Esri World Imagery (офлайн)";
+
+export type MapTileMode = "offline" | "local" | "osm" | "streets";
+
+export function mapAttribution(
+  mode: MapTileMode,
+  opts: { labelsOn: boolean; satellite: boolean },
+): string {
+  const parts: string[] = [];
+  if (mode === "offline" || mode === "local") {
+    if (opts.satellite) parts.push(MAP_ATTR_ESRI);
+    if (opts.labelsOn) {
+      parts.push(MAP_ATTR_OSM, `${MAP_ATTR_CARTO} labels`);
+    }
+  } else if (mode === "osm") {
+    parts.push(MAP_ATTR_OSM);
+  } else if (mode === "streets") {
+    parts.push(MAP_ATTR_OSM, MAP_ATTR_CARTO);
+  }
+  return parts.join(" · ");
+}
+
 /** Online OSM raster — requires network. */
 export const OSM_STYLE: StyleSpecification = {
   version: 8,
   sources: {
     osm: {
       type: "raster",
-      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tiles: [OSM_CARTO_TILES],
       tileSize: 256,
-      attribution: "© OpenStreetMap",
+      attribution: MAP_ATTR_OSM,
     },
   },
   layers: [
@@ -46,6 +91,27 @@ export const OSM_STYLE: StyleSpecification = {
       paint: { "background-color": "#0b1018" },
     },
     { id: "osm", type: "raster", source: "osm" },
+  ],
+};
+
+export const CARTO_DARK_STYLE: StyleSpecification = {
+  version: 8,
+  sources: {
+    carto: {
+      type: "raster",
+      tiles: [CARTO_DARK_ALL_TILES],
+      tileSize: 256,
+      attribution: `${MAP_ATTR_OSM} · ${MAP_ATTR_CARTO}`,
+      maxzoom: OSM_STREETS_MAX_ZOOM,
+    },
+  },
+  layers: [
+    {
+      id: "bg",
+      type: "background",
+      paint: { "background-color": "#0b1018" },
+    },
+    { id: "carto", type: "raster", source: "carto" },
   ],
 };
 
