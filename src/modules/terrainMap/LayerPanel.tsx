@@ -8,9 +8,9 @@ const LAYER_ROWS: {
   source: string;
 }[] = [
   { key: "satellite", label: "Спутник (офлайн)", source: "Esri Imagery · /tiles" },
-  { key: "relief", label: "Рельеф (hillshade)", source: "Terrarium DEM" },
-  { key: "demColormap", label: "Цветовая карта высот", source: "Terrarium" },
-  { key: "contours", label: "Горизонтали (визуал.)", source: "Terrarium · шаг 25 м" },
+  { key: "relief", label: "Рельеф (hillshade)", source: "активный DEM" },
+  { key: "demColormap", label: "Цветовая карта высот", source: "активный DEM" },
+  { key: "contours", label: "Горизонтали / отметки", source: "DEM · шаг от зума" },
   { key: "station", label: "Наземная станция", source: "SQLite stations" },
   { key: "drone", label: "Дрон / цель", source: "live / lookAt / DEMO" },
   { key: "radius", label: "Радиус анализа", source: "геометрия · не RF" },

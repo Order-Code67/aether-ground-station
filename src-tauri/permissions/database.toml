@@ -57,6 +57,7 @@ commands.allow = [
   "video_rtsp_bridge_frame",
   "terrain_inspect_geotiff",
   "terrain_sample_elevation",
+  "terrain_sample_grid",
   "terrain_register_source",
   "gateway_get_config",
   "gateway_set_config",

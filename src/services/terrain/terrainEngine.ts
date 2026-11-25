@@ -120,6 +120,7 @@ function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): num
 
 let active: TerrainAdapter = emptyTerrainAdapter;
 let meta: DemSourceMeta = { id: "none", name: "Нет данных", sourceType: "none" };
+const demListeners = new Set<() => void>();
 
 export function getTerrainAdapter(): TerrainAdapter {
   return active;
@@ -129,9 +130,38 @@ export function getDemMeta(): DemSourceMeta {
   return meta;
 }
 
+export function subscribeDem(listener: () => void): () => void {
+  demListeners.add(listener);
+  return () => {
+    demListeners.delete(listener);
+  };
+}
+
 export function setTerrainAdapter(adapter: TerrainAdapter, source: DemSourceMeta): void {
   active = adapter;
   meta = source;
+  for (const l of demListeners) l();
+}
+
+export async function sampleGeoTiffGrid(opts: {
+  path: string;
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+  cols: number;
+  rows: number;
+}): Promise<{
+  values: number[];
+  cols: number;
+  rows: number;
+  known: number;
+  message: string;
+} | null> {
+  const { isTauriRuntime } = await import("@/services/tauri");
+  if (!isTauriRuntime()) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke("terrain_sample_grid", opts);
 }
 
 /** Manual elevation entry adapter (operator-provided), clearly labeled. */

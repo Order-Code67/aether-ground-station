@@ -54,6 +54,7 @@ pub fn run() {
             video::video_rtsp_bridge_frame,
             terrain::terrain_inspect_geotiff,
             terrain::terrain_sample_elevation,
+            terrain::terrain_sample_grid,
             terrain::terrain_register_source,
             gateway::gateway_get_config,
             gateway::gateway_set_config,

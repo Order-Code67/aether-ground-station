@@ -16,6 +16,7 @@ import type {
   OfflineRegionMeta,
 } from "@/services/gis/gisTypes";
 import { haversineM, bearingDeg } from "@/utils/geo";
+import { parseGisFile } from "@/services/gis/geoImport";
 
 export type GisTool =
   | "none"
@@ -77,6 +78,7 @@ interface GisState {
   setProfileOverrideA: (p: { lat: number; lng: number } | null) => void;
   setProfileOverrideB: (p: { lat: number; lng: number } | null) => void;
   routeLengthM: (routeId: string) => number;
+  importGisText: (filename: string, text: string) => string;
 }
 
 export const useGisStore = create<GisState>((set, get) => ({
@@ -202,10 +204,9 @@ export const useGisStore = create<GisState>((set, get) => ({
 
     if (tool === "measureDeltaH") {
       if (next.length < 2) return "needMore";
-      const { getTerrainAdapter, registerBundledTerrariumDem } = await import(
+      const { getTerrainAdapter } = await import(
         "@/services/terrain/terrainEngine"
       );
-      await registerBundledTerrariumDem();
       const adapter = getTerrainAdapter();
       const sa = await adapter.sample(next[0]!.lat, next[0]!.lng);
       const sb = await adapter.sample(next[1]!.lat, next[1]!.lng);
@@ -351,6 +352,43 @@ export const useGisStore = create<GisState>((set, get) => ({
 
   setProfileOverrideA: (profileOverrideA) => set({ profileOverrideA }),
   setProfileOverrideB: (profileOverrideB) => set({ profileOverrideB }),
+
+  importGisText: (filename, text) => {
+    const parsed = parseGisFile(filename, text);
+    const now = new Date().toISOString();
+    const extraObstacles: GisObstacle[] = parsed.points.map((p) => ({
+      id: nid("obs"),
+      name: p.name,
+      kind: "other" as const,
+      lat: p.lat,
+      lng: p.lng,
+      heightM: null,
+      note: `import ${filename}`,
+      source: "import",
+      createdAt: now,
+    }));
+    const extraRoutes: GisRoute[] = parsed.lines.map((line, i) => ({
+      id: nid("rte"),
+      name: line.name || `Импорт ${get().routes.length + i + 1}`,
+      points: line.points.map((pt) => ({
+        id: nid("rp"),
+        lat: pt.lat,
+        lng: pt.lng,
+        amslM: null,
+        aglM: null,
+      })),
+      createdAt: now,
+      updatedAt: now,
+      planningOnly: true as const,
+    }));
+    set({
+      obstacles: [...get().obstacles, ...extraObstacles],
+      routes: [...get().routes, ...extraRoutes],
+      activeRouteId: extraRoutes[0]?.id ?? get().activeRouteId,
+    });
+    get().persist();
+    return parsed.message;
+  },
 
   routeLengthM: (routeId) => {
     const r = get().routes.find((x) => x.id === routeId);

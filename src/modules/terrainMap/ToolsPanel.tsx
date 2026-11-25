@@ -1,6 +1,7 @@
 import { useGisStore, type GisTool } from "@/stores/gisStore";
 import { useTerrainMapStore } from "@/stores/terrainMapStore";
 import { useStationPlannerStore } from "@/stores/stationPlannerStore";
+import { eventBus } from "@/services/events/eventBus";
 
 const TOOLS: { id: GisTool; label: string }[] = [
   { id: "measureDistance", label: "Расстояние" },
@@ -33,6 +34,7 @@ export function ToolsPanel() {
   const profileB = useGisStore((s) => s.profileOverrideB);
   const setPA = useGisStore((s) => s.setProfileOverrideA);
   const setPB = useGisStore((s) => s.setProfileOverrideB);
+  const importGisText = useGisStore((s) => s.importGisText);
 
   const fmt = (m: (typeof measures)[0]) => {
     if (m.kind === "distance") {
@@ -102,6 +104,39 @@ export function ToolsPanel() {
         <p className="text-[9px] text-ags-dim">
           DEMO не шлёт команды на ESP. LIVE не подменяет данные демо-дроном.
         </p>
+      </div>
+
+      <div className="rounded border border-ags-border/50 p-1.5">
+        <span className="font-semibold text-ags-muted">Импорт геофайлов</span>
+        <p className="text-[9px] text-ags-dim">
+          GeoJSON / KML → точки и линии планирования. Высоты из файла не
+          выдумываются.
+        </p>
+        <label className="mt-1 inline-block cursor-pointer rounded border border-ags-border px-1.5 py-0.5 text-[10px]">
+          Файл…
+          <input
+            type="file"
+            accept=".geojson,.json,.kml,application/geo+json,application/vnd.google-earth.kml+xml"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (!file) return;
+              void file.text().then((text) => {
+                try {
+                  const msg = importGisText(file.name, text);
+                  eventBus.emit("info", "map", msg);
+                } catch (err) {
+                  eventBus.emit(
+                    "error",
+                    "map",
+                    err instanceof Error ? err.message : "Импорт геофайла не удался",
+                  );
+                }
+              });
+            }}
+          />
+        </label>
       </div>
 
       <div className="rounded border border-ags-border/50 p-1.5">

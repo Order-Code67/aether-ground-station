@@ -25,7 +25,7 @@ export const DEFAULT_LAYERS: GisLayerFlags = {
   satellite: true,
   relief: true,
   demColormap: false,
-  contours: false,
+  contours: true,
   station: true,
   drone: true,
   radius: true,
