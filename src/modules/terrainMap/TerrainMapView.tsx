@@ -17,7 +17,6 @@ import { ElevationProfileChart } from "./ElevationProfileChart";
 import { AimingControls } from "@/modules/planner/AimingControls";
 import { LayerPanel } from "./LayerPanel";
 import { ToolsPanel } from "./ToolsPanel";
-import { CursorHud } from "./CursorHud";
 
 const TABS = [
   ["map", "Карта"],
@@ -289,7 +288,6 @@ export function TerrainMapView() {
               <>
                 <MapPanel plannerMode />
                 {(showHeightLegend || layers.demColormap) && <HeightLegend />}
-                <CursorHud />
               </>
             )}
           {(tab === "3d" || view3d) && tab !== "antennas" && (

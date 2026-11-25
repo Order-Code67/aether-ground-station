@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { parseLatLonInput } from "@/services/planner/parseCoords";
 import { useStationPlannerStore } from "@/stores/stationPlannerStore";
 import { eventBus } from "@/services/events/eventBus";
 
 /** Explicit lat/lon placement for НСУ and planning markers. */
-export function CoordinatePlaceForm({ compact = false }: { compact?: boolean }) {
+export function CoordinatePlaceForm({
+  compact = false,
+  seed,
+}: {
+  compact?: boolean;
+  seed?: { lat: string; lng: string; n: number } | null;
+}) {
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
   const [label, setLabel] = useState("");
@@ -13,6 +19,13 @@ export function CoordinatePlaceForm({ compact = false }: { compact?: boolean }) 
   const placeOrMoveNsu = useStationPlannerStore((s) => s.placeOrMoveNsu);
   const addMapMarker = useStationPlannerStore((s) => s.addMapMarker);
   const placeLookAt = useStationPlannerStore((s) => s.placeLookAt);
+
+  useEffect(() => {
+    if (!seed) return;
+    setLat(seed.lat);
+    setLng(seed.lng);
+    setErr(null);
+  }, [seed]);
 
   const parsed = () => {
     const r = parseLatLonInput(lat, lng);

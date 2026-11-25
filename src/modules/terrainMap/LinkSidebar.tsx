@@ -7,7 +7,6 @@ import {
   type RadioVisibilityStatus,
 } from "@/services/terrain/fresnel";
 import { listAntennaProfiles } from "@/services/catalogs";
-import { CoordinatePlaceForm } from "@/modules/planner/CoordinatePlaceForm";
 import { useEffect, useState } from "react";
 import type { AntennaProfile } from "@/services/catalogs";
 
@@ -167,7 +166,9 @@ export function LinkSidebar({
             {pickMarker ? "Клик: точка…" : "Своя точка"}
           </button>
         </div>
-        <CoordinatePlaceForm />
+        <p className="text-[9px] text-ags-dim">
+          Ввод lat/lon — панель «Координаты» у карты.
+        </p>
         <dl className="grid grid-cols-[4.5rem_1fr] gap-y-1 font-mono text-[10px]">
           <dt className="text-ags-dim">НСУ</dt>
           <dd>
