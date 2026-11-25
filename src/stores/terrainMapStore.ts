@@ -229,7 +229,11 @@ export const useTerrainMapStore = create<TerrainMapState>((set, get) => ({
       showRadius: s.showRadius ?? true,
       showFresnel: s.showFresnel ?? true,
       showHeightLegend: s.showHeightLegend ?? true,
-      controlMode: s.controlMode ?? "manual",
+      // "center" is one-shot — never restore it as sticky mode.
+      controlMode:
+        s.controlMode === "center" || s.controlMode == null
+          ? "manual"
+          : s.controlMode,
       maxRangeKm: s.maxRangeKm ?? 50,
       view3d: s.view3d ?? false,
       tab: s.view3d ? "3d" : "map",

@@ -18,7 +18,7 @@ import {
   upsertStation,
 } from "@/services/stations";
 import { eventBus } from "@/services/events/eventBus";
-import { clampAngle, destinationPoint } from "@/utils/geo";
+import { bearingDeg, clampAngle, destinationPoint, haversineM } from "@/utils/geo";
 
 export type PanTiltMode = "simulation" | "monitoring" | "local-status";
 
@@ -108,6 +108,15 @@ interface PlannerState {
     el: number | null,
   ) => void;
   setLookAt: (p: LookAtPoint | null) => void;
+  /**
+   * Set цель B and sync PAN/TILT from geometry (DEM when available).
+   * Pass updateServos:false to park B without moving PAN/TILT (hold mode).
+   */
+  aimLookAt: (
+    lat: number,
+    lng: number,
+    opts?: { updateServos?: boolean },
+  ) => void;
   setPickLookAt: (v: boolean) => void;
   setRangeKm: (km: number) => void;
   setShowRangeRing: (v: boolean) => void;
@@ -304,6 +313,58 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
     set({ factAzimuthDeg: az, factElevationDeg: el }),
 
   setLookAt: (p) => set({ lookAt: p, pickLookAt: false }),
+
+  aimLookAt: (lat, lng, opts) => {
+    const state = get();
+    const st = state.stations.find((s) => s.id === state.activeStationId);
+    set({ lookAt: { lat, lng }, pickLookAt: false });
+    if (!st) return;
+
+    const updateServos = opts?.updateServos !== false;
+    if (!updateServos) return;
+
+    const brg = bearingDeg(
+      { lat: st.latitude, lng: st.longitude },
+      { lat, lng },
+    );
+    let signed = brg > 180 ? brg - 360 : brg;
+    const { azMin, azMax, elMin, elMax } = state.panTiltRanges;
+    signed = Math.min(azMax, Math.max(azMin, signed));
+    // Direct set — avoid syncLookAtFromAzimuth overwriting exact B coords.
+    set({ simAzimuthDeg: signed });
+
+    void (async () => {
+      try {
+        const { getTerrainAdapter } = await import(
+          "@/services/terrain/terrainEngine"
+        );
+        const adapter = getTerrainAdapter();
+        const [stSample, tgtSample] = await Promise.all([
+          adapter.sample(st.latitude, st.longitude),
+          adapter.sample(lat, lng),
+        ]);
+        const terrainSt =
+          stSample && !stSample.missing ? stSample.elevationM : null;
+        const terrainTgt =
+          tgtSample && !tgtSample.missing ? tgtSample.elevationM : null;
+        const antenna = calcAntennaCenterAmsl(
+          terrainSt ?? st.terrainElevationM,
+          st.mastHeightM ?? 15,
+          st.antennaOffsetM,
+        );
+        if (antenna == null || terrainTgt == null) return;
+        const dist = haversineM(
+          { lat: st.latitude, lng: st.longitude },
+          { lat, lng },
+        );
+        if (dist < 1) return;
+        const elDeg = (Math.atan2(terrainTgt - antenna, dist) * 180) / Math.PI;
+        get().setSimElevationDeg(Math.min(elMax, Math.max(elMin, elDeg)));
+      } catch {
+        /* DEM optional */
+      }
+    })();
+  },
 
   setPickLookAt: (v) =>
     set({

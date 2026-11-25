@@ -1,0 +1,29 @@
+{
+  "source": "CARTO Voyager (© OpenStreetMap contributors · © CARTO)",
+  "templateLocal": "/tiles-streets/{z}/{x}/{y}.png",
+  "labelsTemplateLocal": "/tiles-street-labels/{z}/{x}/{y}.png",
+  "coverage": {
+    "centralRussia": {
+      "west": 30.5,
+      "south": 51,
+      "east": 42,
+      "north": 58.5
+    },
+    "smolenskOblast": {
+      "west": 30.7,
+      "south": 53.7,
+      "east": 35.5,
+      "north": 56.05
+    },
+    "smolenskCity": {
+      "west": 31.92,
+      "south": 54.72,
+      "east": 32.18,
+      "north": 54.86
+    },
+    "zooms": "world 0–4 · Central Russia 5–11 · Smolensk oblast 12–13 · city 14–16"
+  },
+  "tileCount": 12621,
+  "labelTileCount": 10052,
+  "fetchedAt": "2026-11-25T22:27:52.297Z"
+}

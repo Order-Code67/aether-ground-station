@@ -75,6 +75,9 @@ export function AimingControls() {
   const factAz = useStationPlannerStore((s) => s.factAzimuthDeg);
   const factEl = useStationPlannerStore((s) => s.factElevationDeg);
   const setFactAngles = useStationPlannerStore((s) => s.setFactAngles);
+  const controlMode = useTerrainMapStore((s) => s.controlMode);
+  const setControlMode = useTerrainMapStore((s) => s.setControlMode);
+  const servosLocked = controlMode === "auto" || controlMode === "hold";
 
   const [presets, setPresets] = useState<AimingPreset[]>([]);
   const [presetName, setPresetName] = useState("");
@@ -144,6 +147,7 @@ export function AimingControls() {
     step: number,
     onChange: (n: number) => void,
     unit: string,
+    locked = false,
   ) => (
     <label className="block text-[11px] text-ags-muted">
       <span className="flex justify-between gap-2">
@@ -160,6 +164,7 @@ export function AimingControls() {
         max={max}
         step={step}
         value={value}
+        disabled={locked}
         onChange={(e) => onChange(Number(e.target.value))}
       />
     </label>
@@ -267,6 +272,29 @@ export function AimingControls() {
         </button>
       </div>
 
+      <div className="flex flex-wrap gap-1">
+        {(
+          [
+            ["manual", "Ручной"],
+            ["auto", "Авто"],
+            ["hold", "Удержание"],
+            ["center", "Центр"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            className={
+              controlMode === id
+                ? "rounded bg-ags-accent px-2 py-0.5 text-[10px] text-white"
+                : "rounded border border-ags-border px-2 py-0.5 text-[10px]"
+            }
+            onClick={() => setControlMode(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       {slider(
         "Направление (серво AZ)",
         az,
@@ -275,6 +303,7 @@ export function AimingControls() {
         0.5,
         setAz,
         "°",
+        servosLocked,
       )}
       {slider(
         "Угол места (серво EL)",
@@ -284,6 +313,7 @@ export function AimingControls() {
         0.5,
         setEl,
         "°",
+        servosLocked,
       )}
       {slider("Радиус действия", rangeKm, 1, 150, 1, setRangeKm, " км")}
       {slider("Патч видео", videoPatchDeg, 5, 180, 1, setVideoPatchDeg, "°")}

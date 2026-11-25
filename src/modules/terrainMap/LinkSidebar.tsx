@@ -9,6 +9,32 @@ import {
 import { listAntennaProfiles } from "@/services/catalogs";
 import { useEffect, useState } from "react";
 import type { AntennaProfile } from "@/services/catalogs";
+import { eventBus } from "@/services/events/eventBus";
+
+function parseCoord(raw: string): number | null {
+  const n = Number(String(raw).trim().replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseLatLng(
+  latRaw: string,
+  lngRaw: string,
+): { lat: number; lng: number } | null {
+  const lat = parseCoord(latRaw);
+  const lng = parseCoord(lngRaw);
+  if (lat == null || lng == null) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+}
+
+/** Accept "55.07, 32.67" or "55.07 32.67" into separate fields. */
+function splitCoordPair(raw: string): { lat: string; lng: string } | null {
+  const m = raw
+    .trim()
+    .match(/^(-?\d+(?:[.,]\d+)?)\s*[,;\s]\s*(-?\d+(?:[.,]\d+)?)$/);
+  if (!m) return null;
+  return { lat: m[1]!.replace(",", "."), lng: m[2]!.replace(",", ".") };
+}
 
 function ToneDot({ tone }: { tone: "ok" | "warn" | "danger" | "muted" }) {
   const c =
@@ -63,12 +89,22 @@ export function LinkSidebar({
   const mapMarkers = useStationPlannerStore((s) => s.mapMarkers);
   const removeMapMarker = useStationPlannerStore((s) => s.removeMapMarker);
   const clearMapMarkers = useStationPlannerStore((s) => s.clearMapMarkers);
+  const addMapMarker = useStationPlannerStore((s) => s.addMapMarker);
+  const placeOrMoveNsu = useStationPlannerStore((s) => s.placeOrMoveNsu);
+  const aimLookAt = useStationPlannerStore((s) => s.aimLookAt);
   const stations = useStationPlannerStore((s) => s.stations);
   const activeStationId = useStationPlannerStore((s) => s.activeStationId);
   const setActiveStationId = useStationPlannerStore((s) => s.setActiveStationId);
   const removeStation = useStationPlannerStore((s) => s.removeStation);
   const lookAt = useStationPlannerStore((s) => s.lookAt);
   const st = stations.find((s) => s.id === activeStationId);
+
+  const [nsuLat, setNsuLat] = useState("");
+  const [nsuLng, setNsuLng] = useState("");
+  const [ptLat, setPtLat] = useState("");
+  const [ptLng, setPtLng] = useState("");
+  const [coordBusy, setCoordBusy] = useState(false);
+  const [coordMsg, setCoordMsg] = useState<string | null>(null);
 
   const controlMode = useTerrainMapStore((s) => s.controlMode);
   const setControlMode = useTerrainMapStore((s) => s.setControlMode);
@@ -171,7 +207,7 @@ export function LinkSidebar({
           <dd>
             {st
               ? `${st.latitude.toFixed(5)}, ${st.longitude.toFixed(5)}`
-              : "не задана — клик по карте"}
+              : "не задана — клик или ввод"}
           </dd>
           <dt className="text-ags-dim">Цель B</dt>
           <dd>
@@ -180,6 +216,144 @@ export function LinkSidebar({
               : "не задана"}
           </dd>
         </dl>
+
+        <div className="space-y-2 rounded border border-ags-border/50 bg-ags-elevated/40 p-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-ags-muted">
+            По координатам
+          </p>
+          <label className="block space-y-1">
+            <span className="text-[10px] text-ags-dim">НСУ · широта, долгота</span>
+            <div className="flex flex-wrap gap-1">
+              <input
+                className="min-w-0 flex-1 rounded border border-ags-border bg-ags-bg px-1.5 py-1 font-mono text-[11px] text-ags-fg"
+                placeholder="55.07372"
+                value={nsuLat}
+                onChange={(e) => {
+                  const pair = splitCoordPair(e.target.value);
+                  if (pair) {
+                    setNsuLat(pair.lat);
+                    setNsuLng(pair.lng);
+                  } else setNsuLat(e.target.value);
+                }}
+                inputMode="decimal"
+              />
+              <input
+                className="min-w-0 flex-1 rounded border border-ags-border bg-ags-bg px-1.5 py-1 font-mono text-[11px] text-ags-fg"
+                placeholder="32.67225"
+                value={nsuLng}
+                onChange={(e) => setNsuLng(e.target.value)}
+                inputMode="decimal"
+              />
+              <button
+                type="button"
+                className="rounded bg-ags-accent px-2 py-1 text-[10px] text-white disabled:opacity-50"
+                disabled={coordBusy}
+                onClick={() => {
+                  const p = parseLatLng(nsuLat, nsuLng);
+                  if (!p) {
+                    setCoordMsg("НСУ: проверьте широту (−90…90) и долготу (−180…180)");
+                    return;
+                  }
+                  setCoordBusy(true);
+                  setCoordMsg(null);
+                  void placeOrMoveNsu(p.lat, p.lng)
+                    .then((s) => {
+                      useGisStore.getState().setBottomPanelOpen(true);
+                      useTerrainMapStore.getState().setTab("map");
+                      eventBus.emit(
+                        "info",
+                        "map",
+                        `НСУ по координатам: ${s.latitude.toFixed(5)}, ${s.longitude.toFixed(5)}`,
+                      );
+                      setCoordMsg(`НСУ: ${s.latitude.toFixed(5)}, ${s.longitude.toFixed(5)}`);
+                    })
+                    .catch((err) => {
+                      setCoordMsg(
+                        err instanceof Error ? err.message : "Не удалось поставить НСУ",
+                      );
+                    })
+                    .finally(() => setCoordBusy(false));
+                }}
+              >
+                НСУ
+              </button>
+            </div>
+          </label>
+          <label className="block space-y-1">
+            <span className="text-[10px] text-ags-dim">
+              Точка · широта, долгота
+            </span>
+            <div className="flex flex-wrap gap-1">
+              <input
+                className="min-w-0 flex-1 rounded border border-ags-border bg-ags-bg px-1.5 py-1 font-mono text-[11px] text-ags-fg"
+                placeholder="55.09623"
+                value={ptLat}
+                onChange={(e) => {
+                  const pair = splitCoordPair(e.target.value);
+                  if (pair) {
+                    setPtLat(pair.lat);
+                    setPtLng(pair.lng);
+                  } else setPtLat(e.target.value);
+                }}
+                inputMode="decimal"
+              />
+              <input
+                className="min-w-0 flex-1 rounded border border-ags-border bg-ags-bg px-1.5 py-1 font-mono text-[11px] text-ags-fg"
+                placeholder="32.67225"
+                value={ptLng}
+                onChange={(e) => setPtLng(e.target.value)}
+                inputMode="decimal"
+              />
+            </div>
+            <div className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                className="rounded border border-ags-border px-2 py-1 text-[10px] hover:bg-ags-elevated"
+                onClick={() => {
+                  const p = parseLatLng(ptLat, ptLng);
+                  if (!p) {
+                    setCoordMsg("Точка: проверьте широту/долготу");
+                    return;
+                  }
+                  const hold = controlMode === "hold";
+                  aimLookAt(p.lat, p.lng, { updateServos: !hold });
+                  useGisStore.getState().setBottomPanelOpen(true);
+                  useTerrainMapStore.getState().setTab("map");
+                  eventBus.emit(
+                    "info",
+                    "map",
+                    hold
+                      ? "Цель B по координатам (hold — углы без изменений)"
+                      : "Цель B по координатам",
+                  );
+                  setCoordMsg(`Цель B: ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`);
+                }}
+              >
+                Цель B
+              </button>
+              <button
+                type="button"
+                className="rounded border border-ags-border px-2 py-1 text-[10px] hover:bg-ags-elevated"
+                onClick={() => {
+                  const p = parseLatLng(ptLat, ptLng);
+                  if (!p) {
+                    setCoordMsg("Точка: проверьте широту/долготу");
+                    return;
+                  }
+                  addMapMarker(p.lat, p.lng);
+                  useTerrainMapStore.getState().setTab("map");
+                  eventBus.emit("info", "map", "Точка по координатам");
+                  setCoordMsg(`Точка: ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`);
+                }}
+              >
+                Своя точка
+              </button>
+            </div>
+          </label>
+          {coordMsg && (
+            <p className="font-mono text-[10px] text-ags-muted">{coordMsg}</p>
+          )}
+        </div>
         {stations.length > 0 && (
           <ul className="max-h-36 space-y-1 overflow-auto">
             {stations.map((s) => {
@@ -254,8 +428,8 @@ export function LinkSidebar({
           </button>
         )}
         <p className="text-[10px] text-ags-dim">
-          Режим постановки: кнопка → клик по карте. Станцию из дерева выбирать не
-          нужно.
+          Постановка: клик по карте или ввод координат. Можно вставить пару
+          «широта, долгота» в первое поле.
         </p>
       </section>
 

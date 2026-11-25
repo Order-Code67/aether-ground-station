@@ -7,7 +7,7 @@ const LAYER_ROWS: {
   label: string;
   source: string;
 }[] = [
-  { key: "satellite", label: "Спутник (офлайн)", source: "Esri Imagery · /tiles" },
+  { key: "satellite", label: "Базовая карта", source: "Esri / CARTO Voyager · улицы" },
   { key: "relief", label: "Рельеф (hillshade)", source: "Terrarium DEM" },
   { key: "demColormap", label: "Цветовая карта высот", source: "Terrarium" },
   { key: "contours", label: "Горизонтали (визуал.)", source: "Terrarium · шаг 25 м" },

@@ -7,7 +7,7 @@ import {
 } from "@/services/stations";
 import { useStationPlannerStore } from "@/stores/stationPlannerStore";
 import { useAuthStore } from "@/stores/authStore";
-import { bearingDeg, haversineM } from "@/utils/geo";
+import { haversineM } from "@/utils/geo";
 import {
   absoluteAssetUrl,
   BUNDLED_DEM_MAX_ZOOM,
@@ -15,8 +15,13 @@ import {
   BUNDLED_DEM_TILES,
   BUNDLED_LABEL_TILES,
   BUNDLED_OFFLINE_TILES,
+  BUNDLED_STREET_LABEL_TILES,
+  BUNDLED_STREET_TILES,
+  CARTO_VOYAGER_LABELS,
+  CARTO_VOYAGER_TILES,
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
+  ESRI_IMAGERY_TILES,
 } from "./mapStyles";
 import { DemOverlayTile } from "./DemOverlayTile";
 import { placesVisibleAtZoom } from "./places";
@@ -43,21 +48,67 @@ import { destinationPoint } from "@/utils/geo";
 import { calcAntennaCenterAmsl } from "@/services/stations";
 import { useTerrainMapStore } from "@/stores/terrainMapStore";
 
-type TileMode = "osm" | "offline" | "local";
+/**
+ * offline — Esri satellite (bundled)
+ * streets — CARTO Voyager streets+names (bundled offline pack)
+ * hybrid — satellite + street-name overlay (offline pack / online fallback)
+ * carto — CARTO Voyager online (detailed streets)
+ * osm — OSM.org raster online
+ * local — custom XYZ template
+ */
+type TileMode =
+  | "offline"
+  | "streets"
+  | "hybrid"
+  | "carto"
+  | "osm"
+  | "local";
 
 const TILE = 256;
 const MIN_Z = 2;
-const MAX_Z_OFFLINE = 12;
-const MAX_Z_OSM = 18;
+const MAX_Z_SAT_OFFLINE = 12;
+const MAX_Z_STREETS_OFFLINE = 16;
+const MAX_Z_ONLINE = 18;
+
+function isOnlineMode(mode: TileMode): boolean {
+  return mode === "carto" || mode === "osm";
+}
+
+function isStreetBasemap(mode: TileMode): boolean {
+  return mode === "streets" || mode === "carto" || mode === "osm";
+}
 
 function templateFor(mode: TileMode, localUrl: string): string {
+  if (mode === "carto") return CARTO_VOYAGER_TILES;
   if (mode === "osm") {
     return "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+  }
+  if (mode === "streets") {
+    return absoluteAssetUrl(BUNDLED_STREET_TILES);
+  }
+  if (mode === "hybrid") {
+    // Base = bundled satellite; street names come from overlay template.
+    return absoluteAssetUrl(BUNDLED_OFFLINE_TILES);
   }
   if (mode === "local") {
     return absoluteAssetUrl(localUrl || BUNDLED_OFFLINE_TILES);
   }
   return absoluteAssetUrl(BUNDLED_OFFLINE_TILES);
+}
+
+function overlayLabelTemplate(mode: TileMode): string | null {
+  if (mode === "hybrid") {
+    return absoluteAssetUrl(BUNDLED_STREET_LABEL_TILES);
+  }
+  if (mode === "offline") {
+    // Place names only (no streets) — keep legacy Esri labels.
+    return absoluteAssetUrl(BUNDLED_LABEL_TILES);
+  }
+  if (mode === "streets") {
+    // Full street basemap already includes names.
+    return null;
+  }
+  return null;
 }
 
 /**
@@ -95,7 +146,6 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const pickStationPos = useStationPlannerStore((s) => s.pickStationPos);
   const pickMarker = useStationPlannerStore((s) => s.pickMarker);
   const mapMarkers = useStationPlannerStore((s) => s.mapMarkers);
-  const setLookAt = useStationPlannerStore((s) => s.setLookAt);
   const setPickStationPos = useStationPlannerStore((s) => s.setPickStationPos);
   const setPickLookAt = useStationPlannerStore((s) => s.setPickLookAt);
   const setPickMarker = useStationPlannerStore((s) => s.setPickMarker);
@@ -103,7 +153,6 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const removeStation = useStationPlannerStore((s) => s.removeStation);
   const addMapMarker = useStationPlannerStore((s) => s.addMapMarker);
   const removeMapMarker = useStationPlannerStore((s) => s.removeMapMarker);
-  const setSimAzimuthDeg = useStationPlannerStore((s) => s.setSimAzimuthDeg);
   const plannerStations = useStationPlannerStore((s) => s.stations);
   const rangeKm = useStationPlannerStore((s) => s.rangeKm);
   const showRangeRing = useStationPlannerStore((s) => s.showRangeRing);
@@ -128,8 +177,9 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     lat: number;
   } | null>(null);
   const [distanceM, setDistanceM] = useState<number | null>(null);
-  const [tileMode, setTileMode] = useState<TileMode>("offline");
+  const [tileMode, setTileMode] = useState<TileMode>("streets");
   const [localUrl, setLocalUrl] = useState(BUNDLED_OFFLINE_TILES);
+  const [streetsOnlineFallback, setStreetsOnlineFallback] = useState(false);
   const layers = useGisStore((s) => s.layers);
   const setCursor = useGisStore((s) => s.setCursor);
   const gisTool = useGisStore((s) => s.tool);
@@ -153,8 +203,34 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const pickMarkerRef = useRef(pickMarker);
   pickMarkerRef.current = pickMarker;
 
-  const zMax = tileMode === "osm" ? MAX_Z_OSM : MAX_Z_OFFLINE;
-  const tileTpl = templateFor(tileMode, localUrl);
+  const zMax = isOnlineMode(tileMode)
+    ? MAX_Z_ONLINE
+    : tileMode === "streets" || tileMode === "hybrid"
+      ? MAX_Z_STREETS_OFFLINE
+      : MAX_Z_SAT_OFFLINE;
+
+  const tileTpl = useMemo(() => {
+    if (tileMode === "streets" && streetsOnlineFallback) {
+      return CARTO_VOYAGER_TILES;
+    }
+    if (tileMode === "hybrid" && streetsOnlineFallback) {
+      return ESRI_IMAGERY_TILES;
+    }
+    return templateFor(tileMode, localUrl);
+  }, [tileMode, localUrl, streetsOnlineFallback]);
+
+  const overlayTpl = useMemo(() => {
+    if (!labelsOn) return null;
+    if (tileMode === "hybrid") {
+      return streetsOnlineFallback
+        ? CARTO_VOYAGER_LABELS
+        : absoluteAssetUrl(BUNDLED_STREET_LABEL_TILES);
+    }
+    if (tileMode === "offline" && labelsOn) {
+      return absoluteAssetUrl(BUNDLED_LABEL_TILES);
+    }
+    return overlayLabelTemplate(tileMode);
+  }, [tileMode, labelsOn, streetsOnlineFallback]);
 
   // Size the host as soon as Map tab mounts — then map paints.
   useEffect(() => {
@@ -180,12 +256,56 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     };
   }, []);
 
-  // Probe offline Smolensk tile once ready.
+  // Probe basemap tiles when mode / ready changes.
   useEffect(() => {
     if (!ready) return;
     let cancelled = false;
+    setStreetsOnlineFallback(false);
     void (async () => {
       try {
+        if (isOnlineMode(tileMode)) {
+          if (cancelled) return;
+          setTileStatus("ok");
+          eventBus.emit(
+            "info",
+            "map",
+            tileMode === "carto"
+              ? "Карта: CARTO Voyager онлайн · улицы и названия"
+              : "Карта: OSM онлайн",
+          );
+          return;
+        }
+
+        if (tileMode === "streets" || tileMode === "hybrid") {
+          const probe =
+            tileMode === "streets"
+              ? absoluteAssetUrl("/tiles-streets/10/603/324.png")
+              : absoluteAssetUrl("/tiles/10/603/324.jpg");
+          const res = await fetch(probe);
+          if (cancelled) return;
+          if (res.ok) {
+            setTileStatus("ok");
+            setStreetsOnlineFallback(false);
+            eventBus.emit(
+              "info",
+              "map",
+              tileMode === "streets"
+                ? "Карта: офлайн улицы (CARTO/OSM) · Смоленск"
+                : "Карта: гибрид спутник + подписи улиц",
+            );
+          } else {
+            // No offline street pack yet — fall back to free online CARTO/Esri.
+            setStreetsOnlineFallback(true);
+            setTileStatus("ok");
+            eventBus.emit(
+              "warning",
+              "map",
+              "Офлайн-улицы не найдены · онлайн CARTO Voyager (npm run tiles:streets)",
+            );
+          }
+          return;
+        }
+
         const probe = absoluteAssetUrl("/tiles/10/603/324.jpg");
         const res = await fetch(probe);
         if (cancelled) return;
@@ -194,11 +314,21 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           res.ok ? "info" : "warning",
           "map",
           res.ok
-            ? "Карта: спутник Esri Imagery · Смоленск OK"
+            ? "Карта: офлайн спутник Esri · Смоленск OK"
             : `Офлайн-тайл недоступен (${res.status})`,
         );
       } catch (e) {
         if (cancelled) return;
+        if (tileMode === "streets" || tileMode === "hybrid") {
+          setStreetsOnlineFallback(true);
+          setTileStatus("ok");
+          eventBus.emit(
+            "warning",
+            "map",
+            "Офлайн-улицы недоступны · переключение на онлайн CARTO",
+          );
+          return;
+        }
         setTileStatus("fail");
         eventBus.emit(
           "warning",
@@ -207,11 +337,10 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         );
       }
     })();
-    eventBus.emit("info", "map", "Карта: автозапуск · спутник + рельеф");
     return () => {
       cancelled = true;
     };
-  }, [ready]);
+  }, [ready, tileMode]);
 
   useEffect(() => {
     void listStations({ complexId: activeComplexId })
@@ -363,12 +492,10 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
 
   const tiles = useMemo(() => buildTileGrid(tileTpl), [buildTileGrid, tileTpl]);
   const labelTiles = useMemo(
-    () =>
-      labelsOn && tileMode === "offline"
-        ? buildTileGrid(absoluteAssetUrl(BUNDLED_LABEL_TILES))
-        : [],
-    [buildTileGrid, labelsOn, tileMode],
+    () => (overlayTpl ? buildTileGrid(overlayTpl) : []),
+    [buildTileGrid, overlayTpl],
   );
+  const showBaseTiles = layers.satellite || isStreetBasemap(tileMode);
   const placeLabels = useMemo(() => placesVisibleAtZoom(zoom), [zoom]);
 
   /** DEM tiles for hillshade (clamp to bundled Terrarium zooms). */
@@ -541,53 +668,18 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
 
     if (pickLookAtRef.current) {
       setGisTool("none");
-      const state = useStationPlannerStore.getState();
-      const st = state.stations.find((s) => s.id === state.activeStationId);
-      setLookAt({ lat, lng: lon });
-      if (st) {
-        const brg = bearingDeg(
-          { lat: st.latitude, lng: st.longitude },
-          { lat, lng: lon },
-        );
-        let signed = brg > 180 ? brg - 360 : brg;
-        const { azMin, azMax, elMin, elMax } = state.panTiltRanges;
-        signed = Math.min(azMax, Math.max(azMin, signed));
-        setSimAzimuthDeg(signed);
-        // Geometric EL from DEM so TILT matches the line of sight immediately.
-        void (async () => {
-          try {
-            const adapter = getTerrainAdapter();
-            const [stSample, tgtSample] = await Promise.all([
-              adapter.sample(st.latitude, st.longitude),
-              adapter.sample(lat, lon),
-            ]);
-            const terrainSt =
-              stSample && !stSample.missing ? stSample.elevationM : null;
-            const terrainTgt =
-              tgtSample && !tgtSample.missing ? tgtSample.elevationM : null;
-            const antenna = calcAntennaCenterAmsl(
-              terrainSt ?? st.terrainElevationM,
-              st.mastHeightM ?? 15,
-              st.antennaOffsetM,
-            );
-            if (antenna == null || terrainTgt == null) return;
-            const dist = haversineM(
-              { lat: st.latitude, lng: st.longitude },
-              { lat, lng: lon },
-            );
-            if (dist < 1) return;
-            const elDeg = (Math.atan2(terrainTgt - antenna, dist) * 180) / Math.PI;
-            useStationPlannerStore
-              .getState()
-              .setSimElevationDeg(
-                Math.min(elMax, Math.max(elMin, elDeg)),
-              );
-          } catch {
-            /* DEM optional */
-          }
-        })();
-      }
-      eventBus.emit("info", "map", "Цель / направление задано");
+      const hold =
+        useTerrainMapStore.getState().controlMode === "hold";
+      useStationPlannerStore
+        .getState()
+        .aimLookAt(lat, lon, { updateServos: !hold });
+      eventBus.emit(
+        "info",
+        "map",
+        hold
+          ? "Цель B задана (hold — PAN/TILT без изменений)"
+          : "Цель / направление задано",
+      );
       return;
     }
 
@@ -776,7 +868,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         onClick={onClick}
         role="presentation"
       >
-        {layers.satellite &&
+        {showBaseTiles &&
           tiles.map((t) => (
             <SafeTile
               key={t.key}
@@ -1386,9 +1478,12 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           onChange={(e) => setTileMode(e.target.value as TileMode)}
           aria-label="Источник тайлов"
         >
-          <option value="offline">Офлайн</option>
-          <option value="local">Локальные XYZ</option>
+          <option value="streets">Улицы (офлайн/CARTO)</option>
+          <option value="hybrid">Гибрид: спутник + улицы</option>
+          <option value="offline">Спутник офлайн</option>
+          <option value="carto">Улицы онлайн (CARTO)</option>
           <option value="osm">OSM онлайн</option>
+          <option value="local">Локальные XYZ</option>
         </select>
         {tileMode === "local" && (
           <input
@@ -1556,6 +1651,11 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         <span className="px-1 text-ags-dim">
           z{zoom}
           {tileStatus === "ok" ? " · OK" : ""}
+          {tileMode === "streets" || tileMode === "carto" || tileMode === "hybrid"
+            ? streetsOnlineFallback
+              ? " · © OSM/CARTO онлайн"
+              : " · © OSM/CARTO"
+            : ""}
         </span>
       </div>
 

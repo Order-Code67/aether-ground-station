@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 
 /** XYZ tile image — hides itself on 404 / decode error (no broken-icon boxes). */
 export function SafeTile({
@@ -21,6 +21,10 @@ export function SafeTile({
   zIndex?: number;
 }) {
   const [ok, setOk] = useState(true);
+  // New URL (zoom/pan/mode change) must retry even after a prior 404.
+  useEffect(() => {
+    setOk(true);
+  }, [url]);
   if (!ok) return null;
   return (
     <img
