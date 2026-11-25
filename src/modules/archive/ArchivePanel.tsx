@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useArchiveStore } from "@/stores/archiveStore";
 import { eventBus } from "@/services/events/eventBus";
+import { dbListRecordings } from "@/services/database";
 
 export function ArchivePanel() {
   const clips = useArchiveStore((s) => s.clips);
@@ -9,6 +10,40 @@ export function ArchivePanel() {
   const setStorageFolder = useArchiveStore((s) => s.setStorageFolder);
   const [query, setQuery] = useState("");
   const [playing, setPlaying] = useState<string | null>(null);
+  const addClip = useArchiveStore((s) => s.addClip);
+
+  useEffect(() => {
+    void dbListRecordings()
+      .then((rows) => {
+        const have = new Set(useArchiveStore.getState().clips.map((c) => c.id));
+        for (const r of rows) {
+          if (have.has(r.id)) continue;
+          let sizeBytes = 0;
+          let mimeType: string | undefined;
+          try {
+            const meta = r.metadata ? JSON.parse(r.metadata) : {};
+            sizeBytes =
+              typeof meta.sizeBytes === "number" ? meta.sizeBytes : 0;
+            mimeType = typeof meta.mimeType === "string" ? meta.mimeType : undefined;
+          } catch {
+            sizeBytes = 0;
+          }
+          addClip({
+            id: r.id,
+            title: r.filename.split(/[/\\]/).pop() ?? r.filename,
+            startedAt: r.startTime,
+            endedAt: r.endTime,
+            source: r.sourceId ?? "recording",
+            sizeBytes,
+            mimeType,
+            filePath: r.filename,
+          });
+        }
+      })
+      .catch(() => {
+        /* preview / no DB */
+      });
+  }, [addClip]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -53,7 +88,10 @@ export function ArchivePanel() {
                   <div className="font-medium">{c.title}</div>
                   <div className="text-xs text-ags-dim">
                     {new Date(c.startedAt).toLocaleString()} · {c.source} ·{" "}
-                    {(c.sizeBytes / 1024).toFixed(0)} КБ
+                    {c.sizeBytes > 0
+                      ? `${(c.sizeBytes / 1024).toFixed(0)} КБ`
+                      : "размер Н/Д"}
+                    {c.filePath ? ` · ${c.filePath}` : ""}
                   </div>
                 </div>
                 <div className="flex gap-1">

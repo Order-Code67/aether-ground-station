@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ardupilotJsonAdapter,
+  exportTelemetryCsv,
   normalizeTelemetryLine,
   px4JsonAdapter,
 } from "./normalize";
@@ -43,5 +44,34 @@ describe("telemetry adapters", () => {
     );
     expect(t?.adapterId).toBe("px4-json");
     expect(t?.voltageV).toBe(11.1);
+  });
+
+  it("does not treat GPS 0,0 as a fix", () => {
+    const t = px4JsonAdapter.parse(
+      JSON.stringify({
+        px4: true,
+        vehicle_global_position: { lat: 0, lon: 0 },
+        battery_status: { voltage_v: 0 },
+        nav_state: "online",
+      }),
+    );
+    expect(t!.latitude).toBeNull();
+    expect(t!.longitude).toBeNull();
+    expect(t!.voltageV).toBe(0);
+  });
+
+  it("CSV leaves missing fields empty instead of 0", () => {
+    const csv = exportTelemetryCsv([
+      {
+        at: "t",
+        voltageV: null,
+        temperatureC: null,
+        latitude: null,
+        longitude: null,
+        altitudeM: null,
+        adapterId: "px4-json",
+      },
+    ]);
+    expect(csv.split("\n")[1]).toBe("t,,,,,,px4-json");
   });
 });

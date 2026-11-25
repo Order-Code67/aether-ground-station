@@ -27,8 +27,8 @@
 
 ## Telemetry adapters
 
-`normalizeTelemetryLine(raw)` → `NormalizedTelemetry` (deviceLabel, voltageV, temperatureC, warnings).  
-UI не парсит JSON производителя напрямую. Экспорт: CSV.
+`normalizeTelemetryLine(raw)` → `NormalizedTelemetry` (deviceLabel, voltageV, temperatureC, GPS, warnings).  
+UI не парсит JSON производителя напрямую. Экспорт: CSV / JSON. Отсутствующие поля и GPS `0,0` — `null` / Н/Д, не ноль. Плагины: `registerPluginTelemetryAdapter`.
 
 ## Network Monitor
 

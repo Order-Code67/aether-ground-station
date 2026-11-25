@@ -3,6 +3,7 @@ import { getAppInfo } from "@/services/tauri";
 import { useAppStore } from "@/stores/appStore";
 import { registerBundledTerrariumDem } from "@/services/terrain/terrainEngine";
 import { eventBus } from "@/services/events/eventBus";
+import { diagnosticsManager } from "@/services/diagnostics/diagnosticsManager";
 
 export function useAppBootstrap(): void {
   const setAppInfo = useAppStore((s) => s.setAppInfo);
@@ -12,6 +13,7 @@ export function useAppBootstrap(): void {
     let cancelled = false;
 
     void (async () => {
+      await diagnosticsManager.hydrate();
       const info = await getAppInfo();
       if (cancelled) return;
       setAppInfo(info);
