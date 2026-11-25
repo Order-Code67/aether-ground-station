@@ -2,11 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { eventBus } from "@/services/events/eventBus";
 import {
   listStations,
-  upsertStation,
   type Station,
 } from "@/services/stations";
 import { useStationPlannerStore } from "@/stores/stationPlannerStore";
-import { useAuthStore } from "@/stores/authStore";
 import { haversineM } from "@/utils/geo";
 import {
   absoluteAssetUrl,
@@ -55,7 +53,7 @@ import {
 } from "@/services/terrain/terrainEngine";
 import { destinationPoint } from "@/utils/geo";
 import { calcAntennaCenterAmsl } from "@/services/stations";
-import { CoordinatePlaceForm } from "@/modules/planner/CoordinatePlaceForm";
+import { CoordDock } from "./CoordDock";
 import { useTerrainMapStore } from "@/stores/terrainMapStore";
 
 type TileMode = MapTileMode;
@@ -100,7 +98,6 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   );
 
   const [stations, setStations] = useState<Station[]>([]);
-  const canManage = useAuthStore((s) => s.can("manageDevices"));
   const setActiveStationId = useStationPlannerStore((s) => s.setActiveStationId);
   const activeComplexId = useStationPlannerStore((s) => s.activeComplexId);
   const activeStationId = useStationPlannerStore((s) => s.activeStationId);
@@ -815,7 +812,8 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   };
 
   return (
-    <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#0b1018]">
+    <div className="flex h-full min-h-0 w-full">
+    <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-[#0b1018]">
       <div
         ref={hostRef}
         className={
@@ -1558,7 +1556,6 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
             >
               {pickMarker ? "Клик: точка…" : "Точка"}
             </button>
-            <CoordinatePlaceForm compact />
           </>
         )}
         <button type="button" className={toolBtn(false)} onClick={addMarkerHere}>
@@ -1721,31 +1718,8 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           : ""}
       </div>
 
-      {canManage && active && (
-        <button
-          type="button"
-          className="ags-glass-btn pointer-events-auto absolute bottom-3 right-3 z-10"
-          onClick={() => {
-            void upsertStation({
-              ...active,
-              latitude: center.lat,
-              longitude: center.lon,
-            }).then((saved) => {
-              setStations((prev) =>
-                prev.map((x) => (x.id === saved.id ? saved : x)),
-              );
-              void useStationPlannerStore.getState().refresh();
-              eventBus.emit(
-                "info",
-                "map",
-                `Станция ${saved.name}: координаты = центр карты`,
-              );
-            });
-          }}
-        >
-          Станция → центр
-        </button>
-      )}
+    </div>
+    <CoordDock centerLat={center.lat} centerLng={center.lon} />
     </div>
   );
 }
