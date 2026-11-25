@@ -7,6 +7,7 @@ import {
   type RadioVisibilityStatus,
 } from "@/services/terrain/fresnel";
 import { listAntennaProfiles } from "@/services/catalogs";
+import { CoordinatePlaceForm } from "@/modules/planner/CoordinatePlaceForm";
 import { useEffect, useState } from "react";
 import type { AntennaProfile } from "@/services/catalogs";
 
@@ -166,12 +167,17 @@ export function LinkSidebar({
             {pickMarker ? "Клик: точка…" : "Своя точка"}
           </button>
         </div>
+        <CoordinatePlaceForm />
         <dl className="grid grid-cols-[4.5rem_1fr] gap-y-1 font-mono text-[10px]">
           <dt className="text-ags-dim">НСУ</dt>
           <dd>
             {st
-              ? `${st.latitude.toFixed(5)}, ${st.longitude.toFixed(5)}`
-              : "не задана — клик по карте"}
+              ? `${st.latitude.toFixed(5)}, ${st.longitude.toFixed(5)}${
+                  st.terrainElevationM == null
+                    ? " · H Н/Д"
+                    : ` · H ${st.terrainElevationM.toFixed(0)} м`
+                }`
+              : "не задана — клик или координаты"}
           </dd>
           <dt className="text-ags-dim">Цель B</dt>
           <dd>
@@ -232,6 +238,7 @@ export function LinkSidebar({
               >
                 <span className="truncate font-mono text-[10px]">
                   {m.label}: {m.lat.toFixed(4)}, {m.lng.toFixed(4)}
+                  {m.elevM == null ? " · H Н/Д" : ` · H ${m.elevM.toFixed(0)} м`}
                 </span>
                 <button
                   type="button"
@@ -254,7 +261,8 @@ export function LinkSidebar({
           </button>
         )}
         <p className="text-[10px] text-ags-dim">
-          Режим постановки: кнопка → клик по карте. Станцию из дерева выбирать не
+          Режим постановки: клик по карте или явные lat/lon. GPS 0,0 не
+          принимается. Станцию из дерева выбирать не
           нужно.
         </p>
       </section>

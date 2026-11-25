@@ -4,6 +4,8 @@ import type { Station } from "@/services/stations";
 import { useStationPlannerStore } from "@/stores/stationPlannerStore";
 import { useAuthStore } from "@/stores/authStore";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { eventBus } from "@/services/events/eventBus";
+import { siteLatLng } from "@/services/planner/parseCoords";
 
 function nid(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`;
@@ -72,14 +74,23 @@ export function PlannerTree() {
 
   const addStation = async () => {
     if (!can || !activeComplexId) return;
+    const fix = siteLatLng(activeSite);
+    if (!fix) {
+      eventBus.emit(
+        "error",
+        "planner",
+        "Нет валидных координат площадки. Задайте НСУ lat/lon на карте — не Москва и не 0,0.",
+      );
+      return;
+    }
     const st: Station = {
       id: nid("stn"),
       complexId: activeComplexId,
       siteId: activeSiteId,
       name: `Станция ${stations.length + 1}`,
       status: "unknown",
-      latitude: activeSite?.latitude ?? 55.75,
-      longitude: activeSite?.longitude ?? 37.62,
+      latitude: fix.lat,
+      longitude: fix.lng,
       terrainElevationM: null,
       mastHeightM: null,
       antennaOffsetM: null,

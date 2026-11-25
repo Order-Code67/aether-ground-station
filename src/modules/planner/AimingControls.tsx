@@ -22,6 +22,7 @@ import {
 import { isTauriRuntime } from "@/services/tauri";
 import { eventBus } from "@/services/events/eventBus";
 import type { SerialPortInfo } from "@/types";
+import { CoordinatePlaceForm } from "@/modules/planner/CoordinatePlaceForm";
 
 function armMapPick(
   enable: boolean,
@@ -106,8 +107,10 @@ export function AimingControls() {
     return (
       <div className="flex flex-col gap-2 p-3 text-xs" data-testid="aiming-controls">
         <p className="text-ags-muted">
-          НСУ ещё нет. Поставьте точку на карте — станция создастся сама.
+          НСУ ещё нет. Клик по карте или ввод lat/lon — станция создастся сама.
+          GPS 0,0 и пустые поля — ошибка.
         </p>
+        <CoordinatePlaceForm />
         <div className="flex flex-wrap gap-1">
           <button
             type="button"
@@ -266,6 +269,7 @@ export function AimingControls() {
           {pickLookAt ? "Клик: цель…" : "Поставить цель B"}
         </button>
       </div>
+      <CoordinatePlaceForm />
 
       {slider(
         "Направление (серво AZ)",
