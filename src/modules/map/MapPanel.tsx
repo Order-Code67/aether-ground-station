@@ -10,13 +10,20 @@ import { useAuthStore } from "@/stores/authStore";
 import { haversineM } from "@/utils/geo";
 import {
   absoluteAssetUrl,
+  BUNDLED_BASE_MAX_ZOOM,
   BUNDLED_DEM_MAX_ZOOM,
   BUNDLED_DEM_MIN_ZOOM,
   BUNDLED_DEM_TILES,
   BUNDLED_LABEL_TILES,
   BUNDLED_OFFLINE_TILES,
+  CARTO_DARK_ALL_TILES,
+  CARTO_DARK_LABELS_TILES,
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
+  mapAttribution,
+  OSM_CARTO_TILES,
+  OSM_STREETS_MAX_ZOOM,
+  type MapTileMode,
 } from "./mapStyles";
 import { DemOverlayTile } from "./DemOverlayTile";
 import { GeoTiffOverlay } from "./GeoTiffOverlay";
@@ -51,17 +58,16 @@ import { calcAntennaCenterAmsl } from "@/services/stations";
 import { CoordinatePlaceForm } from "@/modules/planner/CoordinatePlaceForm";
 import { useTerrainMapStore } from "@/stores/terrainMapStore";
 
-type TileMode = "osm" | "offline" | "local";
+type TileMode = MapTileMode;
 
 const TILE = 256;
 const MIN_Z = 2;
-const MAX_Z_OFFLINE = 12;
-const MAX_Z_OSM = 18;
+const MAX_Z_OFFLINE = BUNDLED_BASE_MAX_ZOOM;
+const MAX_Z_STREETS = OSM_STREETS_MAX_ZOOM;
 
 function templateFor(mode: TileMode, localUrl: string): string {
-  if (mode === "osm") {
-    return "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-  }
+  if (mode === "osm") return OSM_CARTO_TILES;
+  if (mode === "streets") return CARTO_DARK_ALL_TILES;
   if (mode === "local") {
     return absoluteAssetUrl(localUrl || BUNDLED_OFFLINE_TILES);
   }
@@ -165,7 +171,10 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const pickMarkerRef = useRef(pickMarker);
   pickMarkerRef.current = pickMarker;
 
-  const zMax = tileMode === "osm" ? MAX_Z_OSM : MAX_Z_OFFLINE;
+  const zMax =
+    tileMode === "osm" || tileMode === "streets" || labelsOn
+      ? MAX_Z_STREETS
+      : MAX_Z_OFFLINE;
   const tileTpl = templateFor(tileMode, localUrl);
   const demMeta = useMemo(() => getDemMeta(), [demRev]);
   const geotiffPath =
@@ -342,32 +351,37 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   );
 
   const buildTileGrid = useCallback(
-    (tpl: string) => {
+    (tpl: string, atZoom = zoom) => {
       if (size.w <= 0 || size.h <= 0) return [];
-      const c = lonLatToWorldPx(center.lon, center.lat, zoom, TILE);
-      const left = c.x - size.w / 2;
-      const top = c.y - size.h / 2;
-      const x0 = Math.floor(left / TILE) - 1;
-      const y0 = Math.floor(top / TILE) - 1;
-      const x1 = Math.floor((left + size.w) / TILE) + 1;
-      const y1 = Math.floor((top + size.h) / TILE) + 1;
-      const n = 2 ** zoom;
+      const z = Math.max(MIN_Z, Math.min(MAX_Z_STREETS, Math.floor(atZoom)));
+      const scale = 2 ** (zoom - z);
+      const draw = TILE * scale;
+      const c = lonLatToWorldPx(center.lon, center.lat, z, TILE);
+      const leftW = c.x - size.w / 2 / scale;
+      const topW = c.y - size.h / 2 / scale;
+      const x0 = Math.floor(leftW / TILE) - 1;
+      const y0 = Math.floor(topW / TILE) - 1;
+      const x1 = Math.floor((leftW + size.w / scale) / TILE) + 1;
+      const y1 = Math.floor((topW + size.h / scale) / TILE) + 1;
+      const n = 2 ** z;
       const out: {
         key: string;
         left: number;
         top: number;
         url: string;
+        size: number;
       }[] = [];
       for (let x = x0; x <= x1; x++) {
         for (let y = y0; y <= y1; y++) {
           if (y < 0 || y >= n) continue;
           const tx = ((x % n) + n) % n;
           out.push({
-            key: `${tpl}:${zoom}/${tx}/${y}`,
-            left: x * TILE - left,
-            top: y * TILE - top,
+            key: `${tpl}:${z}/${tx}/${y}`,
+            left: x * draw - leftW * scale,
+            top: y * draw - topW * scale,
+            size: draw,
             url: tpl
-              .replace("{z}", String(zoom))
+              .replace("{z}", String(z))
               .replace("{x}", String(tx))
               .replace("{y}", String(y)),
           });
@@ -390,14 +404,24 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     };
   }, [unproject, size.h, size.w]);
 
-  const tiles = useMemo(() => buildTileGrid(tileTpl), [buildTileGrid, tileTpl]);
-  const labelTiles = useMemo(
-    () =>
-      labelsOn && tileMode === "offline"
-        ? buildTileGrid(absoluteAssetUrl(BUNDLED_LABEL_TILES))
-        : [],
-    [buildTileGrid, labelsOn, tileMode],
+  const baseTileZ =
+    tileMode === "osm" || tileMode === "streets"
+      ? zoom
+      : Math.min(zoom, MAX_Z_OFFLINE);
+  const tiles = useMemo(
+    () => buildTileGrid(tileTpl, baseTileZ),
+    [buildTileGrid, tileTpl, baseTileZ],
   );
+  const labelTiles = useMemo(() => {
+    if (!labelsOn) return [];
+    if (tileMode === "streets" || tileMode === "osm") return [];
+    if (zoom >= 13) {
+      return buildTileGrid(CARTO_DARK_LABELS_TILES, zoom);
+    }
+    return tileMode === "offline"
+      ? buildTileGrid(absoluteAssetUrl(BUNDLED_LABEL_TILES), zoom)
+      : [];
+  }, [buildTileGrid, labelsOn, tileMode, zoom]);
   const placeLabels = useMemo(() => placesVisibleAtZoom(zoom), [zoom]);
 
   /** DEM tiles for hillshade (clamp to bundled Terrarium zooms). */
@@ -818,8 +842,8 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
               url={t.url}
               left={t.left}
               top={t.top}
-              width={TILE}
-              height={TILE}
+              width={t.size}
+              height={t.size}
               zIndex={0}
             />
           ))}
@@ -904,8 +928,8 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
             url={t.url}
             left={t.left}
             top={t.top}
-            width={TILE}
-            height={TILE}
+            width={t.size}
+            height={t.size}
             zIndex={2}
           />
         ))}
@@ -1054,6 +1078,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
 
         {/* Place labels — under station icons, never capture clicks */}
         {labelsOn &&
+          zoom < 14 &&
           !pickStationPos &&
           !pickLookAt &&
           !pickMarker &&
@@ -1454,9 +1479,10 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           onChange={(e) => setTileMode(e.target.value as TileMode)}
           aria-label="Источник тайлов"
         >
-          <option value="offline">Офлайн</option>
+          <option value="offline">Офлайн спутник</option>
+          <option value="streets">OSM улицы (тёмные)</option>
+          <option value="osm">OSM Carto</option>
           <option value="local">Локальные XYZ</option>
-          <option value="osm">OSM онлайн</option>
         </select>
         {tileMode === "local" && (
           <input
@@ -1592,6 +1618,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         <button
           type="button"
           className={toolBtn(labelsOn)}
+          title="Улицы и подписи OSM/CARTO поверх спутника (нужна сеть, z≥13)"
           onClick={() => setLabelsOn((v) => !v)}
         >
           Подписи
@@ -1680,6 +1707,19 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           )}
         </div>
       )}
+
+      <div
+        className="pointer-events-none absolute bottom-2 left-3 z-10 max-w-[min(70%,36rem)] rounded bg-black/55 px-2 py-1 text-[9px] leading-snug text-white/80"
+        data-testid="map-attribution"
+      >
+        {mapAttribution(tileMode, {
+          labelsOn,
+          satellite: layers.satellite,
+        })}
+        {labelsOn && zoom < 13 && tileMode !== "streets" && tileMode !== "osm"
+          ? " · улицы с z≥13 при сети"
+          : ""}
+      </div>
 
       {canManage && active && (
         <button

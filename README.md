@@ -126,7 +126,7 @@ aether-ground-station/
 
 ### Карта и DEM (факт)
 
-- База: офлайн тайлы `public/tiles` (Esri World Imagery, Центральная Россия) и OSM при сети. 2D — slippy XYZ, не WebGL-базе MapLibre (ограничение продукта).
+- База: офлайн тайлы `public/tiles` (Esri World Imagery, Центральная Россия). Улицы и названия: **CARTO Dark Matter** (`basemaps.cartocdn.com/dark_all`, данные OSM, ODbL) и OSM Carto (`tile.openstreetmap.org`). Подписи поверх спутника — `dark_only_labels` при z≥13 (нужна сеть). 2D — slippy XYZ, не WebGL-базе MapLibre (OpenFreeMap/Liberty/Protomaps — вектор, не ставим живой WebGL). Attribution на карте.
 - Рельеф на карте: bundled Terrarium (`public/dem-tiles`, z5–11) **или** операторский GeoTIFF — hillshade/горизонтали/colormap рисуются с активного источника.
 - GeoTIFF (только desktop): Float32 / Int16, Deflate/Zlib, strip и tiled, Predictor 2/3, теги ModelPixelScale + Tiepoint. LZW, BigTIFF, файл без привязки — высоты **Н/Д**.
 - Семплер кэширует IFD и разжатые блоки; вне покрытия / nodata не подменяются нулём.
