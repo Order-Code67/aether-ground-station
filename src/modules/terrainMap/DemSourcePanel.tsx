@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getDemMeta } from "@/services/terrain/terrainEngine";
+import { getDemMeta, subscribeDem } from "@/services/terrain/terrainEngine";
 import {
   getSavedGeoTiffPath,
   loadGeoTiffFromPath,
@@ -21,6 +21,7 @@ export function DemSourcePanel() {
     void getSavedGeoTiffPath().then((p) => {
       if (p) setPath(p);
     });
+    return subscribeDem(() => setMeta(getDemMeta()));
   }, []);
 
   const onPick = async () => {

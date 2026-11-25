@@ -19,6 +19,9 @@ import {
   DEFAULT_MAP_ZOOM,
 } from "./mapStyles";
 import { DemOverlayTile } from "./DemOverlayTile";
+import { GeoTiffOverlay } from "./GeoTiffOverlay";
+import { ElevationSpotLabels } from "./ElevationSpotLabels";
+import { contourStepM, mercatorMetersPerPixel } from "./demPaint";
 import { placesVisibleAtZoom } from "./places";
 import { SafeTile } from "./SafeTile";
 import { useGisStore } from "@/stores/gisStore";
@@ -38,7 +41,11 @@ import {
   sectorPolygon,
   type CorridorResult,
 } from "@/services/terrain/flightCorridor";
-import { getTerrainAdapter } from "@/services/terrain/terrainEngine";
+import {
+  getDemMeta,
+  getTerrainAdapter,
+  subscribeDem,
+} from "@/services/terrain/terrainEngine";
 import { destinationPoint } from "@/utils/geo";
 import { calcAntennaCenterAmsl } from "@/services/stations";
 import { useTerrainMapStore } from "@/stores/terrainMapStore";
@@ -79,6 +86,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     lat: DEFAULT_MAP_CENTER[1],
   });
   const [zoom, setZoom] = useState(DEFAULT_MAP_ZOOM);
+  const [demRev, setDemRev] = useState(0);
   const [ready, setReady] = useState(false);
   const [tileStatus, setTileStatus] = useState<"pending" | "ok" | "fail">(
     "pending",
@@ -143,6 +151,10 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const obstacles = useGisStore((s) => s.obstacles);
   const measureDraft = useGisStore((s) => s.measureDraft);
   const verticalExaggeration = useGisStore((s) => s.verticalExaggeration);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const centerRef = useRef(center);
+  centerRef.current = center;
 
   const measureModeRef = useRef(measureMode);
   measureModeRef.current = measureMode;
@@ -155,6 +167,11 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
 
   const zMax = tileMode === "osm" ? MAX_Z_OSM : MAX_Z_OFFLINE;
   const tileTpl = templateFor(tileMode, localUrl);
+  const demMeta = useMemo(() => getDemMeta(), [demRev]);
+  const geotiffPath =
+    demMeta.sourceType === "geotiff" && demMeta.path ? demMeta.path : null;
+
+  useEffect(() => subscribeDem(() => setDemRev((n) => n + 1)), []);
 
   // Size the host as soon as Map tab mounts — then map paints.
   useEffect(() => {
@@ -361,6 +378,18 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     [center.lat, center.lon, size.h, size.w, zoom],
   );
 
+  const viewBounds = useMemo(() => {
+    if (size.w <= 0 || size.h <= 0) return null;
+    const nw = unproject(0, 0);
+    const se = unproject(size.w, size.h);
+    return {
+      west: Math.min(nw.lon, se.lon),
+      east: Math.max(nw.lon, se.lon),
+      north: Math.max(nw.lat, se.lat),
+      south: Math.min(nw.lat, se.lat),
+    };
+  }, [unproject, size.h, size.w]);
+
   const tiles = useMemo(() => buildTileGrid(tileTpl), [buildTileGrid, tileTpl]);
   const labelTiles = useMemo(
     () =>
@@ -396,6 +425,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
       top: number;
       size: number;
       url: string;
+      cellSizeM: number;
     }[] = [];
     const screenC = lonLatToWorldPx(center.lon, center.lat, zoom, TILE);
     for (let x = x0; x <= x1; x++) {
@@ -412,12 +442,14 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
         const lat1 = tile2lat(y + 1, demZ);
         const p0 = lonLatToWorldPx(lon0, lat0, zoom, TILE);
         const p1 = lonLatToWorldPx(lon1, lat1, zoom, TILE);
+        const midLat = tile2lat(y + 0.5, demZ);
         out.push({
           key: `dem-${demZ}/${tx}/${y}`,
           left: p0.x - (screenC.x - size.w / 2),
           top: p0.y - (screenC.y - size.h / 2),
           size: Math.max(1, Math.abs(p1.x - p0.x)),
           url,
+          cellSizeM: mercatorMetersPerPixel(midLat, demZ),
         });
       }
     }
@@ -435,9 +467,9 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
     const { lon, lat } = unproject(e.clientX - rect.left, e.clientY - rect.top);
     void (async () => {
       try {
-        const { getTerrainAdapter, getDemMeta, registerBundledTerrariumDem } =
-          await import("@/services/terrain/terrainEngine");
-        await registerBundledTerrariumDem();
+        const { getTerrainAdapter, getDemMeta } = await import(
+          "@/services/terrain/terrainEngine"
+        );
         const s = await getTerrainAdapter().sample(lat, lon);
         const meta = getDemMeta();
         setCursor({
@@ -458,18 +490,37 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
 
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault();
+    const zNow = zoomRef.current;
     const next = Math.min(
       zMax,
-      Math.max(MIN_Z, zoom + (e.deltaY > 0 ? -1 : 1)),
+      Math.max(MIN_Z, zNow + (e.deltaY > 0 ? -1 : 1)),
     );
-    if (next === zoom) return;
+    if (next === zNow) return;
     const rect = hostRef.current?.getBoundingClientRect();
-    if (rect) {
+    if (rect && size.w > 0) {
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;
-      const under = unproject(sx, sy);
+      const c = lonLatToWorldPx(
+        centerRef.current.lon,
+        centerRef.current.lat,
+        zNow,
+        TILE,
+      );
+      const under = worldPxToLonLat(
+        c.x + (sx - size.w / 2),
+        c.y + (sy - size.h / 2),
+        zNow,
+        TILE,
+      );
+      const origin = lonLatToWorldPx(under.lon, under.lat, next, TILE);
+      const nextCenter = worldPxToLonLat(
+        origin.x - (sx - size.w / 2),
+        origin.y - (sy - size.h / 2),
+        next,
+        TILE,
+      );
       setZoom(next);
-      setCenter({ lon: under.lon, lat: under.lat });
+      setCenter({ lon: nextCenter.lon, lat: nextCenter.lat });
     } else {
       setZoom(next);
     }
@@ -756,7 +807,28 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
             />
           ))}
 
-        {layers.relief &&
+        {geotiffPath && viewBounds && demOverlayNeeded && (
+          <GeoTiffOverlay
+            path={geotiffPath}
+            west={viewBounds.west}
+            south={viewBounds.south}
+            east={viewBounds.east}
+            north={viewBounds.north}
+            width={size.w}
+            height={size.h}
+            zoom={zoom}
+            showRelief={layers.relief}
+            showColormap={layers.demColormap}
+            showContours={layers.contours}
+            reliefOpacity={layers.reliefOpacity}
+            colormapOpacity={layers.colormapOpacity}
+            exaggeration={Math.min(3, verticalExaggeration)}
+            project={(lon, lat) => project(lon, lat)}
+          />
+        )}
+
+        {!geotiffPath &&
+          layers.relief &&
           demTiles.map((t) => (
             <DemOverlayTile
               key={`hs-${t.key}`}
@@ -767,9 +839,11 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
               kind="hillshade"
               opacity={layers.reliefOpacity}
               exaggeration={Math.min(3, verticalExaggeration)}
+              cellSizeM={t.cellSizeM}
             />
           ))}
-        {layers.demColormap &&
+        {!geotiffPath &&
+          layers.demColormap &&
           demTiles.map((t) => (
             <DemOverlayTile
               key={`cm-${t.key}`}
@@ -781,7 +855,8 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
               opacity={layers.colormapOpacity}
             />
           ))}
-        {layers.contours &&
+        {!geotiffPath &&
+          layers.contours &&
           demTiles.map((t) => (
             <DemOverlayTile
               key={`ct-${t.key}`}
@@ -791,8 +866,20 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
               size={t.size}
               kind="contour"
               opacity={0.85}
+              contourStep={contourStepM(zoom)}
             />
           ))}
+        {!geotiffPath && layers.contours && viewBounds && (
+          <ElevationSpotLabels
+            west={viewBounds.west}
+            south={viewBounds.south}
+            east={viewBounds.east}
+            north={viewBounds.north}
+            zoom={zoom}
+            project={project}
+            size={size}
+          />
+        )}
 
         {labelTiles.map((t) => (
           <SafeTile
@@ -1456,7 +1543,9 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
               "map",
               layers.relief
                 ? "Рельеф (hillshade) выкл"
-                : "Рельеф: Terrarium hillshade поверх спутника",
+                : geotiffPath
+                  ? "Рельеф: hillshade по GeoTIFF DEM"
+                  : "Рельеф: Terrarium hillshade поверх спутника",
             );
           }}
         >
@@ -1470,6 +1559,15 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           }
         >
           Высоты
+        </button>
+        <button
+          type="button"
+          className={toolBtn(layers.contours)}
+          onClick={() =>
+            useGisStore.getState().setLayer("contours", !layers.contours)
+          }
+        >
+          Горизонтали
         </button>
         <button
           type="button"

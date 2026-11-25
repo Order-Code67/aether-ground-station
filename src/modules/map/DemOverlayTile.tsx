@@ -16,6 +16,8 @@ export function DemOverlayTile({
   kind,
   opacity = 0.5,
   exaggeration = 1.6,
+  cellSizeM = 30,
+  contourStep = 25,
 }: {
   demUrl: string;
   left: number;
@@ -24,6 +26,8 @@ export function DemOverlayTile({
   kind: Kind;
   opacity?: number;
   exaggeration?: number;
+  cellSizeM?: number;
+  contourStep?: number;
 }) {
   const [src, setSrc] = useState<string | null>(null);
 
@@ -31,17 +35,17 @@ export function DemOverlayTile({
     let alive = true;
     const load =
       kind === "hillshade"
-        ? loadHillshadeUrl(demUrl, exaggeration)
+        ? loadHillshadeUrl(demUrl, exaggeration, cellSizeM)
         : kind === "colormap"
           ? loadColormapUrl(demUrl)
-          : loadContourUrl(demUrl);
+          : loadContourUrl(demUrl, contourStep);
     void load.then((url) => {
       if (alive) setSrc(url);
     });
     return () => {
       alive = false;
     };
-  }, [demUrl, kind, exaggeration]);
+  }, [demUrl, kind, exaggeration, cellSizeM, contourStep]);
 
   if (!src) return null;
   return (
@@ -55,7 +59,7 @@ export function DemOverlayTile({
         top,
         width: size,
         height: size,
-        mixBlendMode: kind === "hillshade" ? "multiply" : "normal",
+        mixBlendMode: kind === "hillshade" ? "overlay" : "normal",
         opacity,
       }}
       onError={() => setSrc(null)}

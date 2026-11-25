@@ -2,7 +2,7 @@
 
 **Модульная настольная платформа (Windows 11)** для подключения и мониторинга наземных аппаратных комплексов: видеозахват, Walksnail VRX, COM/USB, сеть, карта, телеметрия, профили комплексов.
 
-> Версия **0.6.0** (V2 Core+) · Tauri 2 · React 19 · TypeScript · SQLite
+> Версия **1.1.4** · Tauri 2 · React 19 · TypeScript · SQLite · MapLibre (стили) + slippy XYZ
 
 [Аудит V2](docs/AETHER_V2_IMPLEMENTATION_AUDIT.md) · [Roadmap](docs/AETHER_V2_IMPLEMENTATION_ROADMAP.md) · [Прогресс](docs/AETHER_V2_PROGRESS.md) · [Схема БД](docs/SCHEMA.md) · [Архитектура](docs/ARCHITECTURE.md)
 
@@ -31,7 +31,7 @@ Remote Connectivity — только безопасный мониторинг �
 | **Ядро** | Error boundaries по модулям; единый Device Manager (`Online` / `Offline` / `Lost` + auto-reconnect); SQLite как источник правды; локальный вход Administrator / Operator / Observer |
 | **Видео** | UVC/HDMI через MediaDevices; адаптеры RTSP и WebRTC (заготовки до Video Capture Service); Walksnail с явным режимом вывода; запись на диск + метаданные в SQLite |
 | **Workspace** | Drag-and-drop панелей, вкладки, pin/unpin, панель настроек виджета; пресеты Agriculture / Firefighting / Industrial / Ground Robotics / Monitoring / Custom |
-| **Карта** | MapLibre: офлайн-база, локальные XYZ-тайлы, OSM по запросу; метки и измерение дистанций |
+| **Карта / GIS** | Slippy XYZ 1920×1080: офлайн Esri (Смоленск), OSM по запросу; hillshade / colormap / горизонтали и отметки высот по активному DEM; метки, линейка, импорт GeoJSON/KML. Нет высот — **Н/Д**, не 0 |
 | **Телеметрия** | Нормализация через адаптеры (не протокол производителя в UI); история, предупреждения, экспорт CSV |
 | **Сеть** | Локальные интерфейсы и Network Monitor (latency / loss / reconnect) **без** автоскана чужих сетей |
 | **Remote** | Клиентские контракты API v0.3 + sandbox / gateway stub; audit |
@@ -52,7 +52,7 @@ Remote Connectivity — только безопасный мониторинг �
 |------|------------|
 | Desktop shell | Tauri 2 (Rust) |
 | UI | React 19, TypeScript, Vite, Tailwind CSS 4, Zustand |
-| Карта | MapLibre GL |
+| Карта | Slippy XYZ (DOM) + MapLibre style spec; DEM Terrarium / GeoTIFF |
 | Данные | SQLite (`rusqlite`) |
 | Железо | `serialport`, `nusb`, локальные сетевые интерфейсы, MediaDevices (WebView2) |
 
@@ -99,7 +99,7 @@ npm run dev
 
 Установщик после `tauri:build`:
 
-`src-tauri/target/release/bundle/nsis/Aether Ground Station_0.4.0_x64-setup.exe`
+`src-tauri/target/release/bundle/nsis/Aether Ground Station_1.1.4_x64-setup.exe`
 
 (путь к cargo-target может отличаться в CI / sandbox).
 
@@ -122,7 +122,15 @@ aether-ground-station/
 └── README.md
 ```
 
-Ключевые модули UI: `workspace`, `video`, `walksnail`, `map`, `devices`, `network`, `usb`, `serial`, `telemetry`, `archive`, `profiles`, `remote`, `settings`.
+Ключевые модули UI: `workspace`, `video`, `walksnail`, `map` / `terrainMap`, `devices`, `network`, `usb`, `serial`, `telemetry`, `archive`, `profiles`, `remote`, `settings`.
+
+### Карта и DEM (факт)
+
+- База: офлайн тайлы `public/tiles` (Esri World Imagery, Центральная Россия) и OSM при сети. 2D — slippy XYZ, не WebGL-базе MapLibre (ограничение продукта).
+- Рельеф на карте: bundled Terrarium (`public/dem-tiles`, z5–11) **или** операторский GeoTIFF — hillshade/горизонтали/colormap рисуются с активного источника.
+- GeoTIFF (только desktop): Float32 / Int16, Deflate/Zlib, strip и tiled, Predictor 2/3, теги ModelPixelScale + Tiepoint. LZW, BigTIFF, файл без привязки — высоты **Н/Д**.
+- Семплер кэширует IFD и разжатые блоки; вне покрытия / nodata не подменяются нулём.
+- 3D-меш по-прежнему сэмплирует Terrarium-тайлы вокруг станции / Смоленска.
 
 ---
 
@@ -143,7 +151,7 @@ aether-ground-station/
 1. Video Capture Service (Rust/FFmpeg) для RTSP/UVC вне WebView.
 2. Выделенный Remote Gateway (TLS/VPN/сессии) как отдельный сервис.
 3. Подписанный NSIS + `@tauri-apps/plugin-updater`.
-4. Расширенные офлайн-карты (MBTiles).
+4. Расширенные офлайн-карты (MBTiles) и BigTIFF / LZW DEM.
 
 ---
 
