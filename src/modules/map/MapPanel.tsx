@@ -48,6 +48,7 @@ import {
 } from "@/services/terrain/terrainEngine";
 import { destinationPoint } from "@/utils/geo";
 import { calcAntennaCenterAmsl } from "@/services/stations";
+import { CoordinatePlaceForm } from "@/modules/planner/CoordinatePlaceForm";
 import { useTerrainMapStore } from "@/stores/terrainMapStore";
 
 type TileMode = "osm" | "offline" | "local";
@@ -611,8 +612,19 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
 
     if (pickMarkerRef.current) {
       setGisTool("none");
-      addMapMarker(lat, lon);
-      eventBus.emit("info", "map", "Точка добавлена");
+      void addMapMarker(lat, lon)
+        .then((pt) => {
+          const h =
+            pt.elevM == null ? "H Н/Д" : `H ${pt.elevM.toFixed(0)} м`;
+          eventBus.emit("info", "map", `Точка добавлена · ${h}`);
+        })
+        .catch((err) => {
+          eventBus.emit(
+            "error",
+            "map",
+            err instanceof Error ? err.message : "Не удалось поставить точку",
+          );
+        });
       return;
     }
 
@@ -672,7 +684,13 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   };
 
   const addMarkerHere = () => {
-    addMapMarker(center.lat, center.lon);
+    void addMapMarker(center.lat, center.lon).catch((err) => {
+      eventBus.emit(
+        "error",
+        "map",
+        err instanceof Error ? err.message : "Не удалось поставить точку",
+      );
+    });
   };
 
   const zoomBy = (delta: number) => {
@@ -1156,7 +1174,9 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
             <button
               key={m.id}
               type="button"
-              title={`${m.label} · клик — удалить`}
+              title={`${m.label} · ${
+                m.elevM == null ? "H Н/Д" : `H ${m.elevM.toFixed(0)} м`
+              } · клик — удалить`}
               className="absolute z-[2] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
               style={{ left: p.x, top: p.y }}
               onClick={(ev) => {
@@ -1513,6 +1533,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
             >
               {pickMarker ? "Клик: точка…" : "Точка"}
             </button>
+            <CoordinatePlaceForm compact />
           </>
         )}
         <button type="button" className={toolBtn(false)} onClick={addMarkerHere}>
@@ -1645,7 +1666,8 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
           {!active && (
             <div className="text-ags-muted">
               Нажмите <span className="text-ags-accent">НСУ</span> и кликните
-              карту — станция создаётся без выбора из дерева.
+              карту, либо введите lat/lon — станция создаётся без выбора из
+              дерева. GPS 0,0 не принимается.
             </div>
           )}
           {(pickStationPos || pickLookAt || pickMarker) && (

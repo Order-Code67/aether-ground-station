@@ -18,6 +18,7 @@ import {
   upsertStation,
 } from "@/services/stations";
 import { eventBus } from "@/services/events/eventBus";
+import { requirePlannerFix } from "@/services/planner/parseCoords";
 import { clampAngle, destinationPoint } from "@/utils/geo";
 
 export type PanTiltMode = "simulation" | "monitoring" | "local-status";
@@ -39,6 +40,8 @@ export interface MapUserPoint {
   lat: number;
   lng: number;
   label: string;
+  /** DEM AMSL when sampled; null = Н/Д, never invented 0. */
+  elevM: number | null;
 }
 
 /** Default look-at distance along azimuth when B not picked (m). */
@@ -116,7 +119,11 @@ interface PlannerState {
   setControlPatchDeg: (deg: number) => void;
   setPickStationPos: (v: boolean) => void;
   setPickMarker: (v: boolean) => void;
-  addMapMarker: (lat: number, lng: number, label?: string) => void;
+  addMapMarker: (
+    lat: number,
+    lng: number,
+    label?: string,
+  ) => Promise<MapUserPoint>;
   removeMapMarker: (id: string) => void;
   clearMapMarkers: () => void;
   setShowFlightCorridor: (v: boolean) => void;
@@ -346,20 +353,32 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
       pickStationPos: v ? false : get().pickStationPos,
     }),
 
-  addMapMarker: (lat, lng, label) => {
+  addMapMarker: async (lat, lng, label) => {
+    const fix = requirePlannerFix(lat, lng);
+    let elevM: number | null = null;
+    try {
+      const { getTerrainAdapter, registerBundledTerrariumDem } = await import(
+        "@/services/terrain/terrainEngine"
+      );
+      await registerBundledTerrariumDem();
+      const s = await getTerrainAdapter().sample(fix.lat, fix.lng);
+      if (!s.missing && s.elevationM != null) elevM = s.elevationM;
+    } catch {
+      /* DEM optional — leave Н/Д */
+    }
     const n = get().mapMarkers.length + 1;
+    const pt: MapUserPoint = {
+      id: nid("pt"),
+      lat: fix.lat,
+      lng: fix.lng,
+      label: label?.trim() || `Точка ${n}`,
+      elevM,
+    };
     set({
-      mapMarkers: [
-        ...get().mapMarkers,
-        {
-          id: nid("pt"),
-          lat,
-          lng,
-          label: label?.trim() || `Точка ${n}`,
-        },
-      ],
+      mapMarkers: [...get().mapMarkers, pt],
       pickMarker: false,
     });
+    return pt;
   },
 
   removeMapMarker: (id) =>
@@ -409,6 +428,9 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
   },
 
   placeOrMoveNsu: async (lat, lng) => {
+    const fix = requirePlannerFix(lat, lng);
+    lat = fix.lat;
+    lng = fix.lng;
     const { activeStationId, stations, activeComplexId, activeSiteId } = get();
     let elev: number | null = null;
     try {

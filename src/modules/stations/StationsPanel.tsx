@@ -11,10 +11,8 @@ import { emitDomain } from "@/services/events/domainEvents";
 import { useAuthStore } from "@/stores/authStore";
 import { getTerrainAdapter } from "@/services/terrain/terrainEngine";
 import { useStationPlannerStore } from "@/stores/stationPlannerStore";
-
-function newId() {
-  return `stn_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-}
+import { CoordinatePlaceForm } from "@/modules/planner/CoordinatePlaceForm";
+import { parseLatLonInput } from "@/services/planner/parseCoords";
 
 function numOrEmpty(v: number | null | undefined): string {
   return v == null || Number.isNaN(v) ? "" : String(v);
@@ -54,39 +52,21 @@ export function StationsPanel() {
 
   const selected = stations.find((s) => s.id === selectedId) ?? null;
 
-  const addAtDefault = async () => {
-    if (!canManage) return;
-    const lat = 55.75;
-    const lng = 37.62;
-    const sample = await getTerrainAdapter().sample(lat, lng);
-    const st: Station = {
-      id: newId(),
-      complexId: activeComplexId,
-      siteId: activeSiteId,
-      name: `Станция ${stations.length + 1}`,
-      status: "unknown",
-      latitude: lat,
-      longitude: lng,
-      terrainElevationM: sample.elevationM,
-      mastHeightM: null,
-      antennaOffsetM: null,
-      antennaCenterAmslM: calcAntennaCenterAmsl(
-        sample.elevationM,
-        null,
-        null,
-      ),
-      azimuthDeg: null,
-      azimuthRef: "true",
-      payload: "{}",
-      updatedAt: new Date().toISOString(),
-    };
-    const saved = await upsertStation(st);
-    emitDomain("StationUpdated", "stations", `Создана ${saved.name}`, {
-      id: saved.id,
+  const commitCoords = async (latRaw: string, lngRaw: string) => {
+    if (!selected || !canManage) return;
+    const r = parseLatLonInput(latRaw, lngRaw);
+    if (!r.ok) {
+      setError(r.error);
+      return;
+    }
+    setError(null);
+    const sample = await getTerrainAdapter().sample(r.lat, r.lng);
+    const elev = !sample.missing && sample.elevationM != null ? sample.elevationM : null;
+    await patch({
+      latitude: r.lat,
+      longitude: r.lng,
+      terrainElevationM: elev,
     });
-    await refresh();
-    setSelectedId(saved.id);
-    setActiveStationId(saved.id);
   };
 
   const patch = async (partial: Partial<Station>) => {
@@ -105,14 +85,9 @@ export function StationsPanel() {
   return (
     <div className="flex h-full min-h-0 gap-3 p-3 text-sm">
       <div className="flex w-56 shrink-0 flex-col gap-2">
-        <button
-          type="button"
-          disabled={!canManage}
-          className="rounded bg-ags-accent px-2 py-1.5 text-white disabled:opacity-40"
-          onClick={() => void addAtDefault()}
-        >
-          + Станция
-        </button>
+        <div className={!canManage ? "pointer-events-none opacity-40" : ""}>
+          <CoordinatePlaceForm />
+        </div>
         <ul className="min-h-0 flex-1 space-y-1 overflow-auto">
           {stations.map((s) => (
             <li key={s.id}>
@@ -186,22 +161,24 @@ export function StationsPanel() {
             </select>
             <label className="text-ags-dim">Широта</label>
             <input
-              type="number"
-              step="0.00001"
+              inputMode="decimal"
               className="rounded border border-ags-border bg-ags-elevated px-2 py-1 font-mono"
               disabled={!canManage}
-              value={selected.latitude}
-              onChange={(e) => void patch({ latitude: Number(e.target.value) })}
+              defaultValue={selected.latitude}
+              key={`${selected.id}-lat-${selected.latitude}`}
+              onBlur={(e) =>
+                void commitCoords(e.target.value, String(selected.longitude))
+              }
             />
             <label className="text-ags-dim">Долгота</label>
             <input
-              type="number"
-              step="0.00001"
+              inputMode="decimal"
               className="rounded border border-ags-border bg-ags-elevated px-2 py-1 font-mono"
               disabled={!canManage}
-              value={selected.longitude}
-              onChange={(e) =>
-                void patch({ longitude: Number(e.target.value) })
+              defaultValue={selected.longitude}
+              key={`${selected.id}-lng-${selected.longitude}`}
+              onBlur={(e) =>
+                void commitCoords(String(selected.latitude), e.target.value)
               }
             />
             <label className="text-ags-dim">Elevation AMSL</label>
