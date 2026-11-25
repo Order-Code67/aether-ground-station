@@ -6,6 +6,14 @@
 2. Плагин не подставляет фиктивную телеметрию/видео.
 3. Remote-плагины не получают канал пилотирования.
 
+## Adapter SDK
+
+Файл `src/services/plugins/adapterSdk.ts`:
+
+- `assertSafePermissions` — запрет `*`, `system.exec`, `shell.exec`.
+- `registerPluginTelemetryAdapter(manifest, adapter)` — только при `telemetry.parse` и включённом плагине.
+- Адаптер обязан возвращать `null` для неизвестных полей, не подставлять 0.
+
 ## Точки расширения
 
 | Точка | Контракт |

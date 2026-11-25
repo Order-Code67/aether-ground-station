@@ -1,5 +1,6 @@
 import { eventBus } from "@/services/events/eventBus";
-import { dbUpsertJson, dbGetJson } from "@/services/database";
+import { dbGetJson, dbUpsertJson } from "@/services/database";
+import type { AppEvent } from "@/types";
 
 export type DiagnosticSeverity = "debug" | "info" | "warning" | "error" | "critical";
 
@@ -21,18 +22,50 @@ const MAX = 200;
 class DiagnosticsManager {
   private buffer: DiagnosticEntry[] = [];
   private loaded = false;
+  private unsub: (() => void) | null = null;
+  private listeners = new Set<() => void>();
+
+  subscribe(fn: () => void): () => void {
+    this.listeners.add(fn);
+    return () => {
+      this.listeners.delete(fn);
+    };
+  }
+
+  private notify() {
+    for (const l of this.listeners) l();
+  }
 
   async hydrate(): Promise<void> {
     if (this.loaded) return;
     this.buffer = await dbGetJson<DiagnosticEntry[]>(KEY, []);
     this.loaded = true;
+    if (!this.unsub) {
+      this.unsub = eventBus.subscribe((ev: AppEvent) => {
+        if (ev.severity !== "error" && ev.severity !== "warning") return;
+        if (ev.source === "diagnostics") return;
+        void this.report(
+          {
+            module: ev.source,
+            severity: ev.severity === "error" ? "error" : "warning",
+            description: ev.message,
+            context: ev.details,
+            code: ev.id,
+          },
+          { silent: true },
+        );
+      });
+    }
   }
 
   list(): DiagnosticEntry[] {
     return [...this.buffer];
   }
 
-  async report(entry: Omit<DiagnosticEntry, "id" | "at"> & { id?: string; at?: string }): Promise<DiagnosticEntry> {
+  async report(
+    entry: Omit<DiagnosticEntry, "id" | "at"> & { id?: string; at?: string },
+    opts?: { silent?: boolean },
+  ): Promise<DiagnosticEntry> {
     await this.hydrate();
     const full: DiagnosticEntry = {
       id: entry.id ?? `diag_${Date.now().toString(36)}`,
@@ -47,12 +80,15 @@ class DiagnosticsManager {
     };
     this.buffer = [full, ...this.buffer].slice(0, MAX);
     await dbUpsertJson(KEY, this.buffer);
-    eventBus.emit(
-      full.severity === "critical" || full.severity === "error" ? "error" : "warning",
-      "diagnostics",
-      `${full.module}: ${full.description}`,
-      { code: full.code, remediation: full.remediation },
-    );
+    this.notify();
+    if (!opts?.silent) {
+      eventBus.emit(
+        full.severity === "critical" || full.severity === "error" ? "error" : "warning",
+        "diagnostics",
+        `${full.module}: ${full.description}`,
+        { code: full.code, remediation: full.remediation },
+      );
+    }
     return full;
   }
 

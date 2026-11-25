@@ -18,8 +18,8 @@ export function PluginsView() {
       <div>
         <h1 className="text-xl font-semibold">Plugin Manager</h1>
         <p className="text-xs text-ags-muted">
-          Реестр расширений. Ошибки плагинов изолируются; permissions `*` /
-          system.exec запрещены.
+          Реестр расширений. Adapter SDK: `telemetry.parse` без `*` /
+          system.exec. Плагин не подставляет фиктивную телеметрию.
         </p>
       </div>
       <ul className="space-y-2">

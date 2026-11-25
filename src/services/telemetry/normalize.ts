@@ -1,5 +1,9 @@
 import type { DiagnosticsMessage } from "@/types";
-import { parseDiagnosticsMessage } from "@/types";
+import {
+  honestLatLng,
+  honestNumber,
+  parseDiagnosticsMessage,
+} from "@/types";
 
 /** UI-facing telemetry — never carries vendor wire format. */
 export interface NormalizedTelemetry {
@@ -28,11 +32,7 @@ export interface TelemetrySample {
   adapterId?: string | null;
 }
 
-export type TelemetryAdapterId =
-  | "esp32-json"
-  | "generic-json"
-  | "px4-json"
-  | "ardupilot-json";
+export type TelemetryAdapterId = string;
 
 export interface TelemetryAdapter {
   id: TelemetryAdapterId;
@@ -43,11 +43,18 @@ export interface TelemetryAdapter {
 function baseWarnings(msg: {
   voltageV: number | null;
   temperatureC: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  altitudeM?: number | null;
   rawStatus: string;
 }): string[] {
   const warnings: string[] = [];
   if (msg.voltageV === null) warnings.push("Нет данных напряжения");
   if (msg.temperatureC === null) warnings.push("Нет данных температуры");
+  if (msg.latitude == null || msg.longitude == null) {
+    warnings.push("Нет данных GPS");
+  }
+  if (msg.altitudeM == null) warnings.push("Нет данных высоты");
   if (msg.rawStatus !== "online" && msg.rawStatus !== "OK") {
     warnings.push(`Статус: ${msg.rawStatus}`);
   }
@@ -55,21 +62,28 @@ function baseWarnings(msg: {
 }
 
 function fromDiagnostics(msg: DiagnosticsMessage): NormalizedTelemetry {
+  const pos = honestLatLng(msg.latitude, msg.longitude);
+  const voltageV = msg.voltage;
+  const temperatureC = msg.temperature;
+  const altitudeM = msg.altitudeM ?? null;
   return {
     deviceId: msg.device,
     deviceLabel: msg.device,
     firmware: msg.version,
     online: msg.status === "online",
-    voltageV: msg.voltage,
-    temperatureC: msg.temperature,
-    latitude: null,
-    longitude: null,
-    altitudeM: null,
+    voltageV,
+    temperatureC,
+    latitude: pos?.lat ?? null,
+    longitude: pos?.lng ?? null,
+    altitudeM,
     rawStatus: msg.status,
     receivedAt: new Date().toISOString(),
     warnings: baseWarnings({
-      voltageV: msg.voltage,
-      temperatureC: msg.temperature,
+      voltageV,
+      temperatureC,
+      latitude: pos?.lat ?? null,
+      longitude: pos?.lng ?? null,
+      altitudeM,
       rawStatus: msg.status,
     }),
     adapterId: "esp32-json",
@@ -93,18 +107,13 @@ export const genericJsonAdapter: TelemetryAdapter = {
       const o = JSON.parse(line) as Record<string, unknown>;
       const device = String(o.device ?? o.id ?? "unknown");
       const status = String(o.status ?? "unknown");
-      const voltage =
-        typeof o.voltage === "number"
-          ? o.voltage
-          : typeof o.voltageV === "number"
-            ? o.voltageV
-            : null;
-      const temperature =
-        typeof o.temperature === "number"
-          ? o.temperature
-          : typeof o.temperatureC === "number"
-            ? o.temperatureC
-            : null;
+      const voltage = honestNumber(o.voltage ?? o.voltageV);
+      const temperature = honestNumber(o.temperature ?? o.temperatureC);
+      const pos = honestLatLng(
+        o.lat ?? o.latitude,
+        o.lon ?? o.lng ?? o.longitude,
+      );
+      const altitudeM = honestNumber(o.alt ?? o.altitudeM ?? o.altitude);
       return {
         ...fromDiagnostics({
           device,
@@ -112,11 +121,14 @@ export const genericJsonAdapter: TelemetryAdapter = {
           status,
           voltage,
           temperature,
+          latitude: pos?.lat ?? null,
+          longitude: pos?.lng ?? null,
+          altitudeM,
         }),
         adapterId: "generic-json",
-        latitude: num(o.lat ?? o.latitude),
-        longitude: num(o.lon ?? o.lng ?? o.longitude),
-        altitudeM: num(o.alt ?? o.altitudeM ?? o.altitude),
+        latitude: pos?.lat ?? null,
+        longitude: pos?.lng ?? null,
+        altitudeM,
       };
     } catch {
       return null;
@@ -141,11 +153,12 @@ export const px4JsonAdapter: TelemetryAdapter = {
       const pos =
         (o.vehicle_global_position as Record<string, unknown> | undefined) ?? o;
       const status = String(o.nav_state ?? o.status ?? "unknown");
-      const voltageV = num(bat.voltage_v ?? bat.voltageV ?? o.voltage);
-      const temperatureC = num(bat.temperature ?? o.temperature);
-      const latitude = num(pos.lat ?? pos.latitude);
-      const longitude = num(pos.lon ?? pos.longitude);
-      const altitudeM = num(pos.alt ?? pos.altitude);
+      const voltageV = honestNumber(bat.voltage_v ?? bat.voltageV ?? o.voltage);
+      const temperatureC = honestNumber(bat.temperature ?? o.temperature);
+      const fix = honestLatLng(pos.lat ?? pos.latitude, pos.lon ?? pos.longitude);
+      const latitude = fix?.lat ?? null;
+      const longitude = fix?.lng ?? null;
+      const altitudeM = honestNumber(pos.alt ?? pos.altitude);
       return {
         deviceId: String(o.sys_id ?? o.device ?? "px4"),
         deviceLabel: String(o.name ?? o.device ?? "PX4"),
@@ -158,7 +171,14 @@ export const px4JsonAdapter: TelemetryAdapter = {
         altitudeM,
         rawStatus: status,
         receivedAt: new Date().toISOString(),
-        warnings: baseWarnings({ voltageV, temperatureC, rawStatus: status }),
+        warnings: baseWarnings({
+          voltageV,
+          temperatureC,
+          latitude,
+          longitude,
+          altitudeM,
+          rawStatus: status,
+        }),
         adapterId: "px4-json",
       };
     } catch {
@@ -186,18 +206,21 @@ export const ardupilotJsonAdapter: TelemetryAdapter = {
       const gpos =
         (o.GLOBAL_POSITION_INT as Record<string, unknown> | undefined) ?? o;
       const hud = (o.VFR_HUD as Record<string, unknown> | undefined) ?? o;
-      const voltageV = num(
+      const voltageV = honestNumber(
         sys.voltage_battery != null
           ? Number(sys.voltage_battery) / 1000
           : o.voltageV ?? o.voltage,
       );
-      const temperatureC = num(o.temperatureC ?? o.temperature);
-      let latitude = num(gpos.lat ?? gpos.latitude);
-      let longitude = num(gpos.lon ?? gpos.longitude);
+      const temperatureC = honestNumber(o.temperatureC ?? o.temperature);
+      let latRaw = honestNumber(gpos.lat ?? gpos.latitude);
+      let lonRaw = honestNumber(gpos.lon ?? gpos.longitude);
       // GLOBAL_POSITION_INT uses degE7
-      if (latitude != null && Math.abs(latitude) > 180) latitude = latitude / 1e7;
-      if (longitude != null && Math.abs(longitude) > 180) longitude = longitude / 1e7;
-      const altitudeM = num(
+      if (latRaw != null && Math.abs(latRaw) > 180) latRaw = latRaw / 1e7;
+      if (lonRaw != null && Math.abs(lonRaw) > 180) lonRaw = lonRaw / 1e7;
+      const fix = honestLatLng(latRaw, lonRaw);
+      const latitude = fix?.lat ?? null;
+      const longitude = fix?.lng ?? null;
+      const altitudeM = honestNumber(
         gpos.alt != null ? Number(gpos.alt) / 1000 : hud.alt ?? o.altitudeM,
       );
       const status = String(o.mode ?? o.status ?? o.mavpackettype ?? "unknown");
@@ -213,7 +236,14 @@ export const ardupilotJsonAdapter: TelemetryAdapter = {
         altitudeM,
         rawStatus: status,
         receivedAt: new Date().toISOString(),
-        warnings: baseWarnings({ voltageV, temperatureC, rawStatus: status }),
+        warnings: baseWarnings({
+          voltageV,
+          temperatureC,
+          latitude,
+          longitude,
+          altitudeM,
+          rawStatus: status,
+        }),
         adapterId: "ardupilot-json",
       };
     } catch {
@@ -222,21 +252,25 @@ export const ardupilotJsonAdapter: TelemetryAdapter = {
   },
 };
 
-function num(v: unknown): number | null {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string" && v.trim() !== "") {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
-}
-
 const ADAPTERS: TelemetryAdapter[] = [
   esp32JsonAdapter,
   px4JsonAdapter,
   ardupilotJsonAdapter,
   genericJsonAdapter,
 ];
+
+/** Extra adapters from the plugin SDK — never used as a fake sensor source. */
+export function registerTelemetryAdapter(adapter: TelemetryAdapter): void {
+  if (ADAPTERS.some((a) => a.id === adapter.id)) {
+    throw new Error(`Адаптер телеметрии уже есть: ${adapter.id}`);
+  }
+  ADAPTERS.push(adapter);
+}
+
+export function unregisterTelemetryAdapter(id: string): void {
+  const i = ADAPTERS.findIndex((a) => a.id === id);
+  if (i >= 0 && i > 3) ADAPTERS.splice(i, 1);
+}
 
 export function normalizeTelemetryLine(
   line: string,
@@ -257,12 +291,21 @@ export function listTelemetryAdapters(): TelemetryAdapter[] {
   return [...ADAPTERS];
 }
 
+function csvCell(v: number | string | null | undefined): string {
+  if (v == null || v === "") return "";
+  return String(v);
+}
+
 export function exportTelemetryCsv(samples: TelemetrySample[]): string {
   const header =
     "at,voltage_v,temperature_c,latitude,longitude,altitude_m,adapter";
   const rows = samples.map(
     (s) =>
-      `${s.at},${s.voltageV ?? ""},${s.temperatureC ?? ""},${s.latitude ?? ""},${s.longitude ?? ""},${s.altitudeM ?? ""},${s.adapterId ?? ""}`,
+      `${s.at},${csvCell(s.voltageV)},${csvCell(s.temperatureC)},${csvCell(s.latitude)},${csvCell(s.longitude)},${csvCell(s.altitudeM)},${csvCell(s.adapterId)}`,
   );
   return [header, ...rows].join("\n");
+}
+
+export function exportTelemetryJson(samples: TelemetrySample[]): string {
+  return JSON.stringify(samples, null, 2);
 }

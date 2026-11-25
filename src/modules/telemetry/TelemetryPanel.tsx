@@ -4,6 +4,7 @@ import { isTauriRuntime } from "@/services/tauri";
 import { eventBus } from "@/services/events/eventBus";
 import {
   exportTelemetryCsv,
+  exportTelemetryJson,
   listTelemetryAdapters,
   normalizeTelemetryLine,
   type NormalizedTelemetry,
@@ -14,6 +15,8 @@ import {
   appendTelemetryRecord,
   listTelemetryRecords,
 } from "@/services/inventory";
+import { useTerrainMapStore } from "@/stores/terrainMapStore";
+import { honestLatLng } from "@/types";
 
 function buildSpark(
   vals: number[],
@@ -43,6 +46,7 @@ export function TelemetryPanel() {
   const [latest, setLatest] = useState<NormalizedTelemetry | null>(null);
   const [history, setHistory] = useState<TelemetrySample[]>([]);
   const [rawErrors, setRawErrors] = useState<string[]>([]);
+  const setLiveDrone = useTerrainMapStore((s) => s.setLiveDrone);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -69,12 +73,25 @@ export function TelemetryPanel() {
           }
         }
         if (samples.length) setHistory(samples);
-        if (newest) setLatest(newest);
+        if (newest) {
+          setLatest(newest);
+          const fix = honestLatLng(newest.latitude, newest.longitude);
+          if (fix) {
+            setLiveDrone({
+              lat: fix.lat,
+              lng: fix.lng,
+              amslM: newest.altitudeM,
+              aglM: null,
+              at: newest.receivedAt,
+              stale: Date.now() - Date.parse(newest.receivedAt) > 15_000,
+            });
+          }
+        }
       } catch {
         /* preview / empty DB */
       }
     })();
-  }, []);
+  }, [setLiveDrone]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -111,6 +128,17 @@ export function TelemetryPanel() {
           at: msg.receivedAt,
           payload: JSON.stringify(msg),
         });
+        const fix = honestLatLng(msg.latitude, msg.longitude);
+        if (fix) {
+          setLiveDrone({
+            lat: fix.lat,
+            lng: fix.lng,
+            amslM: msg.altitudeM,
+            aglM: null,
+            at: msg.receivedAt,
+            stale: false,
+          });
+        }
         eventBus.emit(
           "info",
           "telemetry",
@@ -124,7 +152,18 @@ export function TelemetryPanel() {
       });
     })();
     return () => unlisten?.();
-  }, [preferred]);
+  }, [preferred, setLiveDrone]);
+
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      const live = useTerrainMapStore.getState().liveDrone;
+      if (!live || live.stale) return;
+      if (Date.now() - Date.parse(live.at) > 15_000) {
+        setLiveDrone({ ...live, stale: true });
+      }
+    }, 2000);
+    return () => window.clearInterval(t);
+  }, [setLiveDrone]);
 
   const voltSpark = useMemo(() => {
     const vals = history
@@ -144,20 +183,40 @@ export function TelemetryPanel() {
     return buildSpark(vals, 220, 48);
   }, [history]);
 
-  const exportCsv = () => {
-    const csv = exportTelemetryCsv(history);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const download = (blob: Blob, name: string) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `ags-telemetry-${Date.now()}.csv`;
+    a.download = name;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const exportCsv = () => {
+    download(
+      new Blob([exportTelemetryCsv(history)], {
+        type: "text/csv;charset=utf-8",
+      }),
+      `ags-telemetry-${Date.now()}.csv`,
+    );
     eventBus.emit("info", "telemetry", "Экспорт CSV");
   };
 
+  const exportJson = () => {
+    download(
+      new Blob([exportTelemetryJson(history)], {
+        type: "application/json",
+      }),
+      `ags-telemetry-${Date.now()}.json`,
+    );
+    eventBus.emit("info", "telemetry", "Экспорт JSON");
+  };
+
   const nd = (v: number | null | undefined, unit = "") =>
-    v == null || Number.isNaN(v) ? "нет данных" : `${v}${unit}`;
+    v == null || Number.isNaN(v) ? "Н/Д" : `${v}${unit}`;
+
+  const live = useTerrainMapStore((s) => s.liveDrone);
+  const ageMs = live ? Date.now() - Date.parse(live.at) : null;
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-auto p-3 text-sm">
@@ -190,6 +249,14 @@ export function TelemetryPanel() {
           >
             Экспорт CSV
           </button>
+          <button
+            type="button"
+            disabled={history.length === 0}
+            className="rounded border border-ags-border px-2 py-1 text-xs disabled:opacity-40"
+            onClick={exportJson}
+          >
+            Экспорт JSON
+          </button>
         </div>
       </div>
       {!latest ? (
@@ -204,19 +271,25 @@ export function TelemetryPanel() {
             <dt className="text-ags-dim">Адаптер</dt>
             <dd>{latest.adapterId ?? "—"}</dd>
             <dt className="text-ags-dim">Прошивка</dt>
-            <dd>{latest.firmware || "—"}</dd>
+            <dd>{latest.firmware?.trim() ? latest.firmware : "Н/Д"}</dd>
             <dt className="text-ags-dim">Online</dt>
             <dd>{latest.online ? "да" : "нет"}</dd>
+            <dt className="text-ags-dim">Канал</dt>
+            <dd>
+              {live
+                ? live.stale
+                  ? "stale (нет свежего кадра)"
+                  : `live · ${ageMs != null ? Math.round(ageMs / 1000) : "Н/Д"} с`
+                : "Н/Д (нет GPS-фикса)"}
+            </dd>
             <dt className="text-ags-dim">Напряжение</dt>
             <dd>
-              {latest.voltageV === null
-                ? "нет данных"
-                : `${latest.voltageV} В`}
+              {latest.voltageV === null ? "Н/Д" : `${latest.voltageV} В`}
             </dd>
             <dt className="text-ags-dim">Температура</dt>
             <dd>
               {latest.temperatureC === null
-                ? "нет данных"
+                ? "Н/Д"
                 : `${latest.temperatureC} °C`}
             </dd>
             <dt className="text-ags-dim">Широта</dt>

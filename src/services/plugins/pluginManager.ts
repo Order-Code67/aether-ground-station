@@ -49,13 +49,20 @@ class PluginManager {
     );
   }
 
+  isEnabled(id: string): boolean {
+    return this.plugins.some((p) => p.id === id && p.enabled);
+  }
+
   async register(manifest: PluginManifest): Promise<void> {
     await this.hydrate();
     if (this.plugins.some((p) => p.id === manifest.id)) {
       throw new Error("Плагин уже зарегистрирован");
     }
-    // Hard deny dangerous permission grants
-    if (manifest.permissions.includes("*") || manifest.permissions.includes("system.exec")) {
+    if (
+      manifest.permissions.some(
+        (p) => p === "*" || p === "system.exec" || p === "shell.exec" || p === "all",
+      )
+    ) {
       throw new Error("Небезопасные permissions отклонены");
     }
     this.plugins.push({ ...manifest, enabled: false });
