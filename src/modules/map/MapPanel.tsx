@@ -7,7 +7,7 @@ import {
 } from "@/services/stations";
 import { useStationPlannerStore } from "@/stores/stationPlannerStore";
 import { useAuthStore } from "@/stores/authStore";
-import { bearingDeg, haversineM } from "@/utils/geo";
+import { haversineM } from "@/utils/geo";
 import {
   absoluteAssetUrl,
   BUNDLED_DEM_MAX_ZOOM,
@@ -104,7 +104,7 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const pickStationPos = useStationPlannerStore((s) => s.pickStationPos);
   const pickMarker = useStationPlannerStore((s) => s.pickMarker);
   const mapMarkers = useStationPlannerStore((s) => s.mapMarkers);
-  const setLookAt = useStationPlannerStore((s) => s.setLookAt);
+  const placeLookAt = useStationPlannerStore((s) => s.placeLookAt);
   const setPickStationPos = useStationPlannerStore((s) => s.setPickStationPos);
   const setPickLookAt = useStationPlannerStore((s) => s.setPickLookAt);
   const setPickMarker = useStationPlannerStore((s) => s.setPickMarker);
@@ -112,7 +112,6 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
   const removeStation = useStationPlannerStore((s) => s.removeStation);
   const addMapMarker = useStationPlannerStore((s) => s.addMapMarker);
   const removeMapMarker = useStationPlannerStore((s) => s.removeMapMarker);
-  const setSimAzimuthDeg = useStationPlannerStore((s) => s.setSimAzimuthDeg);
   const plannerStations = useStationPlannerStore((s) => s.stations);
   const rangeKm = useStationPlannerStore((s) => s.rangeKm);
   const showRangeRing = useStationPlannerStore((s) => s.showRangeRing);
@@ -593,20 +592,20 @@ export function MapPanel({ plannerMode = false }: { plannerMode?: boolean }) {
 
     if (pickLookAtRef.current) {
       setGisTool("none");
-      const state = useStationPlannerStore.getState();
-      const st = state.stations.find((s) => s.id === state.activeStationId);
-      setLookAt({ lat, lng: lon });
-      if (st) {
-        const brg = bearingDeg(
-          { lat: st.latitude, lng: st.longitude },
-          { lat, lng: lon },
+      try {
+        const b = placeLookAt(lat, lon);
+        eventBus.emit(
+          "info",
+          "map",
+          `Цель B: ${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}`,
         );
-        let signed = brg > 180 ? brg - 360 : brg;
-        const { azMin, azMax } = state.panTiltRanges;
-        signed = Math.min(azMax, Math.max(azMin, signed));
-        setSimAzimuthDeg(signed);
+      } catch (err) {
+        eventBus.emit(
+          "error",
+          "map",
+          err instanceof Error ? err.message : "Не удалось поставить цель B",
+        );
       }
-      eventBus.emit("info", "map", "Цель / направление задано");
       return;
     }
 
