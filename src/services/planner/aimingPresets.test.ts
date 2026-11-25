@@ -42,6 +42,12 @@ describe("aimingPresets", () => {
     expect(list[0]?.name).toBe("Смоленск восток");
   });
 
+  it("rejects GPS 0,0 presets", async () => {
+    await expect(
+      upsertAimingPreset({ ...sample(), latitude: 0, longitude: 0 }),
+    ).rejects.toThrow(/0,0/);
+  });
+
   it("deletes by id", async () => {
     await upsertAimingPreset(sample());
     await deleteAimingPreset("p1");

@@ -19,7 +19,7 @@ import {
 } from "@/services/stations";
 import { eventBus } from "@/services/events/eventBus";
 import { requirePlannerFix } from "@/services/planner/parseCoords";
-import { clampAngle, destinationPoint } from "@/utils/geo";
+import { bearingDeg, clampAngle, destinationPoint } from "@/utils/geo";
 
 export type PanTiltMode = "simulation" | "monitoring" | "local-status";
 
@@ -111,6 +111,8 @@ interface PlannerState {
     el: number | null,
   ) => void;
   setLookAt: (p: LookAtPoint | null) => void;
+  /** Place цель B by explicit/click coords; GPS 0,0 rejected. */
+  placeLookAt: (lat: number, lng: number) => LookAtPoint;
   setPickLookAt: (v: boolean) => void;
   setRangeKm: (km: number) => void;
   setShowRangeRing: (v: boolean) => void;
@@ -310,7 +312,31 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
   setFactAngles: (az, el) =>
     set({ factAzimuthDeg: az, factElevationDeg: el }),
 
-  setLookAt: (p) => set({ lookAt: p, pickLookAt: false }),
+  setLookAt: (p) => {
+    if (!p) {
+      set({ lookAt: null, pickLookAt: false });
+      return;
+    }
+    get().placeLookAt(p.lat, p.lng);
+  },
+
+  placeLookAt: (lat, lng) => {
+    const fix = requirePlannerFix(lat, lng);
+    const { stations, activeStationId, panTiltRanges } = get();
+    const st = stations.find((s) => s.id === activeStationId);
+    let az = get().simAzimuthDeg;
+    if (st) {
+      const brg = bearingDeg(
+        { lat: st.latitude, lng: st.longitude },
+        { lat: fix.lat, lng: fix.lng },
+      );
+      const signed = brg > 180 ? brg - 360 : brg;
+      az = clampAngle(signed, panTiltRanges.azMin, panTiltRanges.azMax);
+    }
+    const lookAt: LookAtPoint = { lat: fix.lat, lng: fix.lng };
+    set({ lookAt, pickLookAt: false, simAzimuthDeg: az });
+    return lookAt;
+  },
 
   setPickLookAt: (v) =>
     set({
@@ -554,6 +580,7 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
   },
 
   applyAimingPreset: async (p) => {
+    const fix = requirePlannerFix(p.latitude, p.longitude);
     const { activeStationId, stations, panTiltRanges } = get();
     const st = stations.find((s) => s.id === activeStationId);
     set({
@@ -574,8 +601,8 @@ export const useStationPlannerStore = create<PlannerState>((set, get) => ({
     if (st) {
       await get().saveStation({
         ...st,
-        latitude: p.latitude,
-        longitude: p.longitude,
+        latitude: fix.lat,
+        longitude: fix.lng,
         mastHeightM: p.mastHeightM,
         azimuthDeg: p.azimuthDeg,
         elevationDeg: p.elevationDeg,

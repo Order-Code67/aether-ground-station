@@ -7,6 +7,7 @@ import {
   diagnosticsManager,
   type DiagnosticEntry,
 } from "@/services/diagnostics/diagnosticsManager";
+import { diagnosticsToCsv, eventsToCsv } from "@/services/events/exportEventsCsv";
 
 /**
  * GS-9 Event Center — filter / search / export; retention handled backend prune.
@@ -59,21 +60,59 @@ export function EventsCenter() {
     });
   }, [merged, severity, query]);
 
-  const exportJson = () => {
-    const body =
-      tab === "diagnostics"
-        ? diagnosticsManager.exportJson()
-        : JSON.stringify(filtered, null, 2);
-    const blob = new Blob([body], { type: "application/json" });
+  const filteredDiags = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return diags.filter((d) => {
+      if (severity !== "all" && d.severity !== severity) return false;
+      if (!q) return true;
+      return (
+        d.description.toLowerCase().includes(q) ||
+        d.module.toLowerCase().includes(q) ||
+        (d.remediation?.toLowerCase().includes(q) ?? false)
+      );
+    });
+  }, [diags, severity, query]);
+
+  const download = (body: string, filename: string, mime: string) => {
+    const blob = new Blob([body], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download =
-      tab === "diagnostics"
-        ? `aether-diagnostics-${Date.now()}.json`
-        : `aether-events-${Date.now()}.json`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const exportJson = () => {
+    if (tab === "diagnostics") {
+      download(
+        JSON.stringify(filteredDiags, null, 2),
+        `aether-diagnostics-${Date.now()}.json`,
+        "application/json",
+      );
+      return;
+    }
+    download(
+      JSON.stringify(filtered, null, 2),
+      `aether-events-${Date.now()}.json`,
+      "application/json",
+    );
+  };
+
+  const exportCsv = () => {
+    if (tab === "diagnostics") {
+      download(
+        diagnosticsToCsv(filteredDiags),
+        `aether-diagnostics-${Date.now()}.csv`,
+        "text/csv",
+      );
+      return;
+    }
+    download(
+      eventsToCsv(filtered),
+      `aether-events-${Date.now()}.csv`,
+      "text/csv",
+    );
   };
 
   return (
@@ -133,6 +172,13 @@ export function EventsCenter() {
         >
           Экспорт JSON
         </button>
+        <button
+          type="button"
+          className="rounded border border-ags-border px-2 py-1 text-xs"
+          onClick={exportCsv}
+        >
+          Экспорт CSV
+        </button>
       </div>
       {tab === "events" ? (
         <ul className="min-h-0 flex-1 space-y-1 overflow-auto font-mono text-[11px]">
@@ -152,7 +198,7 @@ export function EventsCenter() {
         </ul>
       ) : (
         <ul className="min-h-0 flex-1 space-y-1 overflow-auto font-mono text-[11px]">
-          {diags.map((d) => (
+          {filteredDiags.map((d) => (
             <li
               key={d.id}
               className="rounded border border-ags-border bg-ags-panel px-2 py-1"
@@ -162,10 +208,11 @@ export function EventsCenter() {
               {d.remediation ? ` · ${d.remediation}` : ""}
             </li>
           ))}
-          {!diags.length && (
+          {!filteredDiags.length && (
             <li className="text-ags-muted">
-              Диагностика пуста — нет ошибок/предупреждений (не заполняется
-              нулями).
+              {diags.length
+                ? "Нет записей по фильтру"
+                : "Диагностика пуста — нет ошибок/предупреждений (не заполняется нулями)."}
             </li>
           )}
         </ul>

@@ -1,4 +1,5 @@
 import { dbGetJson, dbUpsertJson } from "@/services/database";
+import { requirePlannerFix } from "@/services/planner/parseCoords";
 
 const KEY = "aiming_presets";
 
@@ -25,6 +26,7 @@ export async function listAimingPresets(): Promise<AimingPreset[]> {
 export async function upsertAimingPreset(
   preset: AimingPreset,
 ): Promise<AimingPreset[]> {
+  requirePlannerFix(preset.latitude, preset.longitude);
   const cur = await listAimingPresets();
   const next = {
     ...preset,

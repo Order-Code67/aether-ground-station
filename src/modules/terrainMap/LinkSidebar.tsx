@@ -183,7 +183,7 @@ export function LinkSidebar({
           <dd>
             {lookAt
               ? `${lookAt.lat.toFixed(5)}, ${lookAt.lng.toFixed(5)}`
-              : "не задана"}
+              : "не задана — клик или координаты"}
           </dd>
         </dl>
         {stations.length > 0 && (

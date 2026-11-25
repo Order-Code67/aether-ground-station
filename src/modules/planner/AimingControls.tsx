@@ -170,23 +170,31 @@ export function AimingControls() {
 
   const savePreset = async () => {
     const name = presetName.trim() || `Наведение ${presets.length + 1}`;
-    const next = await upsertAimingPreset({
-      id: `aim_${Date.now().toString(36)}`,
-      name,
-      stationId: st.id,
-      latitude: st.latitude,
-      longitude: st.longitude,
-      azimuthDeg: az,
-      elevationDeg: el,
-      rangeKm,
-      videoPatchDeg,
-      controlPatchDeg,
-      mastHeightM: mast,
-      updatedAt: new Date().toISOString(),
-    });
-    setPresets(next);
-    setPresetName("");
-    eventBus.emit("info", "planner", `Пресет сохранён: ${name}`);
+    try {
+      const next = await upsertAimingPreset({
+        id: `aim_${Date.now().toString(36)}`,
+        name,
+        stationId: st.id,
+        latitude: st.latitude,
+        longitude: st.longitude,
+        azimuthDeg: az,
+        elevationDeg: el,
+        rangeKm,
+        videoPatchDeg,
+        controlPatchDeg,
+        mastHeightM: mast,
+        updatedAt: new Date().toISOString(),
+      });
+      setPresets(next);
+      setPresetName("");
+      eventBus.emit("info", "planner", `Пресет сохранён: ${name}`);
+    } catch (e) {
+      eventBus.emit(
+        "error",
+        "planner",
+        e instanceof Error ? e.message : "Не удалось сохранить пресет",
+      );
+    }
   };
 
   const refreshPorts = async () => {
@@ -385,7 +393,17 @@ export function AimingControls() {
                 <button
                   type="button"
                   className="min-w-0 flex-1 truncate rounded border border-ags-border px-2 py-0.5 text-left hover:bg-ags-elevated"
-                  onClick={() => void applyAimingPreset(p)}
+                  onClick={() =>
+                    void applyAimingPreset(p).catch((e) =>
+                      eventBus.emit(
+                        "error",
+                        "planner",
+                        e instanceof Error
+                          ? e.message
+                          : "Не удалось применить пресет",
+                      ),
+                    )
+                  }
                 >
                   {p.name}
                 </button>

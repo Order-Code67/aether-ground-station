@@ -12,6 +12,7 @@ export function CoordinatePlaceForm({ compact = false }: { compact?: boolean }) 
   const [busy, setBusy] = useState(false);
   const placeOrMoveNsu = useStationPlannerStore((s) => s.placeOrMoveNsu);
   const addMapMarker = useStationPlannerStore((s) => s.addMapMarker);
+  const placeLookAt = useStationPlannerStore((s) => s.placeLookAt);
 
   const parsed = () => {
     const r = parseLatLonInput(lat, lng);
@@ -45,6 +46,23 @@ export function CoordinatePlaceForm({ compact = false }: { compact?: boolean }) 
       eventBus.emit("error", "planner", msg);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const placeB = () => {
+    const r = parsed();
+    if (!r) return;
+    try {
+      const b = placeLookAt(r.lat, r.lng);
+      eventBus.emit(
+        "info",
+        "planner",
+        `Цель B: ${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}`,
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Не удалось поставить цель B";
+      setErr(msg);
+      eventBus.emit("error", "planner", msg);
     }
   };
 
@@ -123,6 +141,14 @@ export function CoordinatePlaceForm({ compact = false }: { compact?: boolean }) 
           onClick={() => void placeNsu()}
         >
           НСУ по координатам
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          className="rounded border border-ags-border px-2 py-0.5 text-[10px] disabled:opacity-40"
+          onClick={() => placeB()}
+        >
+          Цель B по координатам
         </button>
         <button
           type="button"

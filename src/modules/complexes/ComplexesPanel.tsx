@@ -10,7 +10,7 @@ import { useStationPlannerStore } from "@/stores/stationPlannerStore";
 import { useAuthStore } from "@/stores/authStore";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { eventBus } from "@/services/events/eventBus";
-import { siteLatLng } from "@/services/planner/parseCoords";
+import { parseLatLonInput, siteLatLng } from "@/services/planner/parseCoords";
 
 function nid(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`;
@@ -283,32 +283,63 @@ export function ComplexesPanel() {
             />
             <label className="text-ags-dim">Широта</label>
             <input
-              type="number"
-              step="0.00001"
+              inputMode="decimal"
               className="rounded border border-ags-border bg-ags-elevated px-2 py-1 font-mono"
               disabled={!can}
-              value={activeSite.latitude ?? ""}
-              onChange={(e) =>
+              defaultValue={activeSite.latitude ?? ""}
+              key={`${activeSite.id}-lat-${activeSite.latitude ?? "na"}`}
+              onBlur={(e) => {
+                const latRaw = e.target.value;
+                const lngRaw = String(activeSite.longitude ?? "");
+                if (!latRaw.trim() && !lngRaw.trim()) {
+                  void saveSite({
+                    ...activeSite,
+                    latitude: null,
+                    longitude: null,
+                  });
+                  return;
+                }
+                const r = parseLatLonInput(latRaw, lngRaw);
+                if (!r.ok) {
+                  eventBus.emit("error", "planner", r.error);
+                  return;
+                }
                 void saveSite({
                   ...activeSite,
-                  latitude: e.target.value === "" ? null : Number(e.target.value),
-                })
-              }
+                  latitude: r.lat,
+                  longitude: r.lng,
+                });
+              }}
             />
             <label className="text-ags-dim">Долгота</label>
             <input
-              type="number"
-              step="0.00001"
+              inputMode="decimal"
               className="rounded border border-ags-border bg-ags-elevated px-2 py-1 font-mono"
               disabled={!can}
-              value={activeSite.longitude ?? ""}
-              onChange={(e) =>
+              defaultValue={activeSite.longitude ?? ""}
+              key={`${activeSite.id}-lng-${activeSite.longitude ?? "na"}`}
+              onBlur={(e) => {
+                const lngRaw = e.target.value;
+                const latRaw = String(activeSite.latitude ?? "");
+                if (!latRaw.trim() && !lngRaw.trim()) {
+                  void saveSite({
+                    ...activeSite,
+                    latitude: null,
+                    longitude: null,
+                  });
+                  return;
+                }
+                const r = parseLatLonInput(latRaw, lngRaw);
+                if (!r.ok) {
+                  eventBus.emit("error", "planner", r.error);
+                  return;
+                }
                 void saveSite({
                   ...activeSite,
-                  longitude:
-                    e.target.value === "" ? null : Number(e.target.value),
-                })
-              }
+                  latitude: r.lat,
+                  longitude: r.lng,
+                });
+              }}
             />
             {can && (
               <button
